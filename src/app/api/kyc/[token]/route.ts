@@ -1,0 +1,57 @@
+import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/mongodb';
+import KycRequest from '@/models/KycRequest';
+import Client from '@/models/Client';
+
+// GET : Vérifier si un token est valide
+export async function GET(request: Request, context: { params: Promise<{ token: string }> }) {
+  const { token } = await context.params;
+  await dbConnect();
+
+  const kycRequest = await KycRequest.findOne({ token });
+  if (!kycRequest) {
+    return NextResponse.json({ success: false, error: 'Lien invalide ou expiré.' }, { status: 404 });
+  }
+  if (kycRequest.dateSubmission) {
+    return NextResponse.json({ success: false, error: 'Cette demande a déjà été soumise.' }, { status: 400 });
+  }
+
+  return NextResponse.json({ success: true, data: { token: kycRequest.token, clientId: kycRequest.clientId } });
+}
+
+// POST : Soumettre le formulaire KYC
+export async function POST(request: Request, context: { params: Promise<{ token: string }> }) {
+  const { token } = await context.params;
+  await dbConnect();
+
+  const kycRequest = await KycRequest.findOne({ token });
+  if (!kycRequest) {
+    return NextResponse.json({ success: false, error: 'Lien invalide.' }, { status: 404 });
+  }
+  if (kycRequest.dateSubmission) {
+    return NextResponse.json({ success: false, error: 'Déjà soumis.' }, { status: 400 });
+  }
+
+  const body = await request.json();
+  const { nom, prenom, email, telephone, photoIdUrl, photoIdPublicId, selfieUrl, selfiePublicId, politiqueAcceptee } = body;
+
+  if (!politiqueAcceptee) {
+    return NextResponse.json({ success: false, error: 'Vous devez accepter la politique.' }, { status: 400 });
+  }
+
+  kycRequest.nom = nom;
+  kycRequest.prenom = prenom;
+  kycRequest.email = email;
+  kycRequest.telephone = telephone;
+  kycRequest.photoIdUrl = photoIdUrl;
+  kycRequest.photoIdPublicId = photoIdPublicId;
+  kycRequest.selfieUrl = selfieUrl;
+  kycRequest.selfiePublicId = selfiePublicId;
+  kycRequest.politiqueAcceptee = true;
+  kycRequest.dateSubmission = new Date();
+  kycRequest.statutKyc = 'EN_ATTENTE';
+
+  await kycRequest.save();
+
+  return NextResponse.json({ success: true, message: 'Demande KYC soumise avec succès.' });
+}
