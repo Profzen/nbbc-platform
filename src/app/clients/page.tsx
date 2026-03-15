@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, MoreVertical, Users, Phone } from 'lucide-react';
-
+import { Plus, Search, MoreVertical, Users, Phone, PenTool } from 'lucide-react';
 export default function ClientsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,42 +112,47 @@ export default function ClientsPage() {
                           <div className="text-slate-800 font-bold group-hover:text-blue-600 transition-colors">
                             {client.prenom} {client.nom}
                           </div>
-                          <div className="flex gap-1 mt-1">
-                            {client.servicesUtilises?.slice(0, 3).map((service: string) => (
-                              <span key={service} className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">
-                                {service}
-                              </span>
-                            ))}
-                            {client.servicesUtilises?.length > 3 && (
-                              <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">+{client.servicesUtilises.length - 3}</span>
-                            )}
-                          </div>
+                        <div className="flex gap-1 mt-1">
+                          {client.servicesUtilises?.slice(0, 3).map((service: string) => (
+                            <span key={service} className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">
+                              {service}
+                            </span>
+                          ))}
+                          {client.servicesUtilises?.length > 3 && (
+                            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">+{client.servicesUtilises.length - 3}</span>
+                          )}
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-slate-700 text-sm font-semibold">{client.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1 items-start">
-                        <span className="bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-md text-xs font-bold border border-slate-200">
-                          {client.typeClient?.replace('_', ' ')}
-                        </span>
-                        <span className="text-slate-500 text-xs font-medium">{client.paysResidence}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-slate-600 font-semibold text-sm">
-                        <Phone size={14} className="text-slate-400" />
-                        {client.telephone || <span className="text-slate-300 font-normal italic">Non renseigné</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-slate-700 text-sm font-semibold">{client.email}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className="bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-md text-xs font-bold border border-slate-200">
+                        {client.typeClient?.replace('_', ' ')}
+                      </span>
+                      <span className="text-slate-500 text-xs font-medium">{client.paysResidence}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-slate-600 font-semibold text-sm">
+                      <Phone size={14} className="text-slate-400" />
+                      {client.telephone || <span className="text-slate-300 font-normal italic">Non renseigné</span>}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Link href={`/signatures`} className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 flex items-center gap-1.5 text-xs font-bold" title="Créer une demande de signature">
+                        <PenTool size={16} /> Signer
+                      </Link>
                       <button className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
                         <MoreVertical size={18} />
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </td>
+                </tr>
                 ))
               )}
             </tbody>

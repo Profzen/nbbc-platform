@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, CreditCard, FileText, BarChart3, Settings, ShieldCheck } from 'lucide-react';
+import { Users, CreditCard, FileText, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen } from 'lucide-react';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import LogoutButton from './LogoutButton';
@@ -15,6 +15,7 @@ export default async function Sidebar() {
   const headersList = await headers();
   const pathname = headersList.get('x-current-path') || '';
   if (/^\/kyc\/[0-9a-f-]{36}/.test(pathname)) return null;
+  if (/^\/sign\//.test(pathname)) return null;
 
   await dbConnect();
   const pendingKyc = await KycRequest.countDocuments({ dateSubmission: { $exists: true, $ne: null }, statutKyc: 'EN_ATTENTE' });
@@ -37,6 +38,14 @@ export default async function Sidebar() {
           <CreditCard size={20} />
           Cartes & Comptes
         </Link>
+        <Link href="/signatures" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 text-slate-300 transition-colors">
+          <PenTool size={20} />
+          E-Signature
+        </Link>
+        <Link href="/comptabilite" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 text-slate-300 transition-colors">
+          <BookOpen size={20} />
+          Comptabilité
+        </Link>
         <Link href="/kyc" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 text-slate-300 transition-colors">
           <ShieldCheck size={20} />
           Vérification KYC
@@ -45,6 +54,10 @@ export default async function Sidebar() {
               {pendingKyc}
             </span>
           )}
+        </Link>
+        <Link href="/marketing" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 text-slate-300 transition-colors">
+          <Megaphone size={20} />
+          Marketing
         </Link>
       </nav>
       <div className="p-4 border-t border-slate-800 space-y-3">

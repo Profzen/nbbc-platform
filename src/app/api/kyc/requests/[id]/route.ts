@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import KycRequest from '@/models/KycRequest';
 import Client from '@/models/Client';
+import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -30,11 +37,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       statutKyc: 'VALIDE',
       kycRequestId: kycRequest._id,
     });
-  } else if (statutKyc === 'REJETE' && kycRequest.clientId) {
-    await Client.findByIdAndUpdate(kycRequest.clientId, {
-      statutKyc: 'REJETE',
-    });
+  } else if (statutKyc === 'REJETE') {
+    if (kycRequest.clientId) {
+      await Client.findByIdAndUpdate(kycRequest.clientId, {
+        statutKyc: 'REJETE',
+      });
+    }
+    
+    // Nettoyage Cloudinary des pièces d'identité et selfies rejetés
+    try {
+      if (kycRequest.photoIdPublicId) await cloudinary.uploader.destroy(kycRequest.photoIdPublicId);
+      if (kycRequest.selfiePublicId) await cloudinary.uploader.destroy(kycRequest.selfiePublicId);
+    } catch (error) {
+      console.error("Erreur suppression Cloudinary (KYC):", error);
+    }
   }
 
   return NextResponse.json({ success: true, data: kycRequest });
 }
+

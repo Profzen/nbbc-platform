@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, Clock, XCircle, Eye, Check, X, Link2, Copy, CheckCheck } from 'lucide-react';
+import { ShieldCheck, Clock, XCircle, Eye, Check, X, Link2, Copy, CheckCheck, FileText } from 'lucide-react';
+import { generateKycPdf } from '@/lib/pdf-generator';
 
 type TabType = 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
 
@@ -198,6 +199,14 @@ export default function KycAdminPage() {
                 </div>
               ))}
             </div>
+
+            <button
+              onClick={() => generateKycPdf(selectedReq)}
+              className="w-full mb-6 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <FileText size={18} className="text-blue-600" />
+              Télécharger Rapport PDF
+            </button>
 
             {activeTab === 'EN_ATTENTE' && (
               <>

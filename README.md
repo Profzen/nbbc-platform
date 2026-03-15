@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📊 NBBC Platform - État de l'Avancement (vs DN.txt)
 
-## Getting Started
+Ce document résume l'évolution du projet NBBC par rapport au cahier des charges initial (`DN.txt`).
 
-First, run the development server:
+## ✅ 1. Gestion des Bases de Données & Clients
+- [x] **Base Clients Centrale** : Nom, prénom, email, téléphone, pays, type de client.
+- [x] **Catégorisation par Services** : Zelle, Cash App, Wire, PayPal, Crypto, Euro, Wise.
+- [x] **Gestion des Cartes Externes** : Base de données dédiée avec titulaire, type, statut.
+- [x] **Comptes & IBAN** : Gestion des numéros de comptes et wallets crypto par client.
+- [x] **Historique & Documents** : Lien direct entre les clients et leurs pièces/contrats.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## ✅ 2. Module KYC (Conformité)
+- [x] **Génération de Liens Sécurisés** : Token unique envoyé au client.
+- [x] **Interface Publique** : Formulaire + Upload Photo ID + **Selfie Webcam**.
+- [x] **Validation Admin** : Panel de vérification (Validation / Rejet).
+- [x] **Reporting** : Génération de certificats KYC en PDF professionnel.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## ✅ 3. E-Signature & Contrats
+- [x] **Gestion des Modèles** : Éditeur de modèles de contrat HTML dynamique.
+- [x] **Upload de Documents** : Signature sur documents PDF existants.
+- [x] **Signature en ligne** : Dessin de la signature à la souris/doigt (react-signature-canvas).
+- [x] **Archivage** : Stockage sécurisé des documents signés sur Cloudinary.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ✅ 4. Marketing & Communication
+- [x] **Gestion des Campagnes** : Création et ciblage de segments clients.
+- [x] **Envoi d'Emailing** : Intégration avec Resend (Personnalisation `{{prenom}}`).
+- [x] **Logs d'Envoi** : Suivi des statistiques d'envoi et erreurs.
+- [/] **Canaux Alternatifs** : Prêt pour SMS/WhatsApp (Structure présente).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ✅ 5. Comptabilité & Finance (V5)
+- [x] **Transactions** : Achats, Ventes, Dépenses et Dettes (depuis `indexc.html`).
+- [x] **Gestion de Comptes** : Caisse, Banques, Mobile Money avec soldes persistants.
+- [x] **Dépôts / Retraits** : Suivi Flooz/TMoney/Virement avec impact sur les soldes.
+- [x] **Dashboard KPI** : CA, Bénéfice, Dépenses, Graphique d'évolution mensuelle.
 
-## Learn More
+## ✅ 6. Sécurité & Administration
+- [x] **Authentification** : Système de session sécurisé (NextAuth).
+- [x] **Gestion des Rôles** : Modèle prêt pour SuperAdmin, Compliance, Agent, etc. (actuellement ouvert à tous sur demande).
+- [x] **Interface** : Design moderne "Dark Mode" premium et responsive.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 Prochaines Étapes / Restant
+- [ ] **Automatisation des sauvegardes** régulières de la base MongoDB.
+- [ ] **Multi-Facteur (2FA)** pour l'accès administrateur.
+- [ ] **Intégration API directes**  pour suivi en temps réel.
+- [ ] **Relances Automatiques** pour les contrats non signés ou KYC en attente.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+*Dernière mise à jour : 15 Mars 2026*

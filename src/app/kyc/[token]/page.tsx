@@ -169,7 +169,7 @@ export default function KycPublicPage() {
         {/* Étapes */}
         <div className="flex border-b border-slate-100">
           {['Informations', 'Photo ID', 'Selfie', 'Validation'].map((label, i) => {
-            const stepIndex = { form: 0, selfie: 2, policy: 3 }[step as string] ?? (step === 'loading' ? -1 : 1);
+            const stepIndex = { form: 0, selfie: 2, policy: 3 }[step as string] ?? ((step as string) === 'loading' ? -1 : 1);
             const isActive = i === stepIndex;
             const isDone = i < (stepIndex ?? 0);
             return (
