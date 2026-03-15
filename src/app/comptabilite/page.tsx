@@ -269,7 +269,7 @@ export default function ComptabilitePage() {
 
       {/* ============= TRANSACTIONS (Achats, Ventes, Dépenses, Dettes) ============= */}
       {['ACHAT','VENTE','DEPENSE','DETTE'].includes(activeTab) && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
             <div className="flex items-center gap-3">
               <h2 className="font-bold text-slate-800">{TYPE_CONFIG[activeTab as TxType].label}s</h2>
@@ -317,7 +317,7 @@ export default function ComptabilitePage() {
             <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 flex items-center gap-4"><ArrowUpCircle size={28} className="text-rose-600"/><div><p className="text-sm text-rose-700 font-bold">Total Retraits</p><p className="text-2xl font-black text-rose-900">{fmt(totalRetraits)}</p></div></div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between bg-slate-50 items-center">
               <h2 className="font-bold text-slate-800">Opérations ({filteredDepots.length})</h2>
               <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
