@@ -94,7 +94,9 @@ export default function ComptabilitePage() {
   const totalRetraits = depots.filter(d => d.type === 'RETRAIT').reduce((a, d) => a + d.montant, 0);
 
   // Monthly bar chart
-  const getMonthlyData = () => {
+  interface MonthlyDataPoint { month: string; ACHAT: number; VENTE: number; DEPENSE: number; }
+  
+  const getMonthlyData = (): MonthlyDataPoint[] => {
     const months: Record<string, Record<string, number>> = {};
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
@@ -105,9 +107,16 @@ export default function ComptabilitePage() {
     transactions.forEach(t => {
       const d = new Date(t.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (months[key]) months[key][t.type] = (months[key][t.type] || 0) + t.montant;
+      if (months[key]) {
+        months[key][t.type] = (months[key][t.type] || 0) + t.montant;
+      }
     });
-    return Object.entries(months).map(([k, v]) => ({ month: k.slice(5), ...v }));
+    return Object.entries(months).map(([k, v]) => ({
+      month: k.slice(5),
+      ACHAT: v.ACHAT || 0,
+      VENTE: v.VENTE || 0,
+      DEPENSE: v.DEPENSE || 0,
+    }));
   };
   const monthlyData = getMonthlyData();
   const maxVal = Math.max(...monthlyData.flatMap(m => [m.ACHAT, m.VENTE, m.DEPENSE]), 1);
