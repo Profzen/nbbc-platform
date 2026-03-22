@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers } from 'lucide-react';
+import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers, X } from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
 
 type ImportResult = {
   totalRows: number;
@@ -11,6 +14,20 @@ type ImportResult = {
   skipped: number;
 };
 
+type ColumnMapping = {
+  firstName: string | null;
+  lastName: string | null;
+  middleName: string | null;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  company: string | null;
+  customField: string | null;
+  notes: string | null;
+};
+
+const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#f97316'];
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +35,21 @@ export default function ClientsPage() {
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [csvSamples, setCsvSamples] = useState<any[]>([]);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
+    firstName: null,
+    lastName: null,
+    middleName: null,
+    email: null,
+    phone: null,
+    country: null,
+    company: null,
+    customField: null,
+    notes: null,
+  });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredClients = clients.filter(c => 
@@ -46,13 +78,11 @@ export default function ClientsPage() {
 
     const byService = Array.from(serviceCount.entries())
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .sort((a, b) => b.value - a.value);
 
     const byCountry = Array.from(countryCount.entries())
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
+      .sort((a, b) => b.value - a.value);
 
     const byType = Array.from(typeCount.entries())
       .map(([name, value]) => ({ name, value }))
@@ -76,14 +106,42 @@ export default function ClientsPage() {
       });
   };
 
-  const handleCsvImport = async (file: File) => {
+  const handleCsvSelect = async (file: File) => {
+    setSelectedFile(file);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/clients/import/preview', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setCsvColumns(data.data.columns);
+        setCsvSamples(data.data.sampleRows);
+        setColumnMapping(data.data.detectedMapping || columnMapping);
+        setShowMappingModal(true);
+      }
+    } catch (error) {
+      console.error('Error previewing CSV:', error);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+
     setImporting(true);
     setImportMessage('Import en cours...');
     setImportResult(null);
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', selectedFile);
+      formData.append('mapping', JSON.stringify(columnMapping));
 
       const res = await fetch('/api/clients/import', {
         method: 'POST',
@@ -98,6 +156,7 @@ export default function ClientsPage() {
 
       setImportResult(data.data);
       setImportMessage('Import terminé avec succès.');
+      setShowMappingModal(false);
       fetchClients();
     } catch (error: any) {
       setImportMessage(error.message || 'Erreur pendant l\'import.');
@@ -112,7 +171,6 @@ export default function ClientsPage() {
   useEffect(() => {
     fetchClients();
   }, []);
-
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -129,15 +187,14 @@ export default function ClientsPage() {
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleCsvImport(file);
+              if (file) handleCsvSelect(file);
             }}
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium shadow-sm flex items-center gap-2 disabled:opacity-60"
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium shadow-sm flex items-center gap-2"
           >
-            {importing ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <Upload size={18} />}
+            <Upload size={18} />
             Importer CSV
           </button>
           <Link 
@@ -164,163 +221,271 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-slate-700">Par Service</h2>
-            <Layers size={16} className="text-slate-400" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Layers size={18} className="text-blue-600" />
+            <h2 className="text-sm font-bold text-slate-700">Distribution par Service</h2>
           </div>
-          <div className="space-y-2">
-            {dashboard.byService.slice(0, 5).map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">{item.name}</span>
-                <span className="font-bold text-slate-800">{item.value}</span>
+          {dashboard.byService.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={dashboard.byService.slice(0, 6)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {dashboard.byService.slice(0, 6).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-slate-400">
+              Aucune donnée
+            </div>
+          )}
+          <div className="mt-4 space-y-1 text-xs">
+            {dashboard.byService.slice(0, 6).map((item, idx) => (
+              <div key={item.name} className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                <span className="text-slate-600">{item.name}</span>
+                <span className="ml-auto font-bold text-slate-800">{item.value}</span>
               </div>
             ))}
-            {dashboard.byService.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-slate-700">Par Pays</h2>
-            <Globe2 size={16} className="text-slate-400" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe2 size={18} className="text-green-600" />
+            <h2 className="text-sm font-bold text-slate-700">Distribution par Pays</h2>
           </div>
-          <div className="space-y-2">
-            {dashboard.byCountry.slice(0, 5).map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">{item.name}</span>
-                <span className="font-bold text-slate-800">{item.value}</span>
-              </div>
-            ))}
-            {dashboard.byCountry.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
-          </div>
+          {dashboard.byCountry.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={dashboard.byCountry.slice(0, 8)}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" fontSize={12} tick={{ fill: '#64748b' }} />
+                <YAxis fontSize={12} tick={{ fill: '#64748b' }} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                />
+                <Bar dataKey="value" fill="#10b981" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-slate-400">
+              Aucune donnée
+            </div>
+          )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-slate-700">Par Type Client</h2>
-            <Building2 size={16} className="text-slate-400" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Building2 size={18} className="text-purple-600" />
+            <h2 className="text-sm font-bold text-slate-700">Distribution par Type</h2>
           </div>
-          <div className="space-y-2">
-            {dashboard.byType.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">{item.name.replace('_', ' ')}</span>
-                <span className="font-bold text-slate-800">{item.value}</span>
-              </div>
-            ))}
-            {dashboard.byType.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
-          </div>
+          {dashboard.byType.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={dashboard.byType} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" fontSize={12} tick={{ fill: '#64748b' }} />
+                <YAxis dataKey="name" type="category" fontSize={12} tick={{ fill: '#64748b' }} width={100} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                />
+                <Bar dataKey="value" fill="#8b5cf6" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-slate-400">
+              Aucune donnée
+            </div>
+          )}
         </div>
       </div>
 
+      {showMappingModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Mapping des Colonnes</h2>
+                <p className="text-sm text-slate-500 mt-1">Mappez les colonnes de votre CSV à nos champs</p>
+              </div>
+              <button
+                onClick={() => setShowMappingModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg"
+              >
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: 'firstName', label: 'Prénom' },
+                  { key: 'lastName', label: 'Nom' },
+                  { key: 'middleName', label: 'Deuxième Prénom' },
+                  { key: 'email', label: 'Email' },
+                  { key: 'phone', label: 'Téléphone' },
+                  { key: 'country', label: 'Pays' },
+                  { key: 'company', label: 'Entreprise' },
+                  { key: 'customField', label: 'Service/Domaine' },
+                ].map((field) => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      {field.label}
+                    </label>
+                    <select
+                      value={columnMapping[field.key as keyof ColumnMapping] || ''}
+                      onChange={(e) =>
+                        setColumnMapping({
+                          ...columnMapping,
+                          [field.key]: e.target.value || null,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">-- Non mappé --</option>
+                      {csvColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Aperçu des données</h3>
+                <div className="bg-slate-50 rounded-lg overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-100">
+                        {csvColumns.map((col) => (
+                          <th key={col} className="px-3 py-2 text-left text-slate-700 font-semibold whitespace-nowrap">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {csvSamples.map((row, idx) => (
+                        <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
+                          {csvColumns.map((col) => (
+                            <td key={col} className="px-3 py-2 text-slate-600 whitespace-nowrap text-xs">
+                              {row[col] || '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-200">
+                <button
+                  onClick={() => setShowMappingModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 font-medium"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing}
+                  className="ml-auto px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium disabled:opacity-60 flex items-center gap-2"
+                >
+                  {importing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Importation...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Importer
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Toolbar */}
-        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <div className="relative w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Rechercher par nom, email..." 
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2">
+            <Search size={18} className="text-slate-400" />
+            <input
+              type="text"
+              placeholder="Rechercher par nom, prénom ou email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white"
+              className="bg-transparent flex-1 outline-none text-slate-700 placeholder-slate-400"
             />
-          </div>
-          <div className="text-sm text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-lg">
-            {filteredClients.length} client(s) affiché(s)
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Client</th>
-                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Email</th>
-                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Type & Pays</th>
-                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Téléphone</th>
-                <th className="px-6 py-4 font-semibold text-right"></th>
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-bold text-slate-700">Nom</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-slate-700">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-slate-700">Téléphone</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-slate-700">Pays</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-slate-700">Services</th>
+                <th className="px-6 py-3 text-right text-xs font-bold text-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                    Chargement des clients...
-                  </td>
-                </tr>
-              ) : filteredClients.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-16 text-center">
-                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-500 mb-4">
-                      <Users size={32} />
-                    </div>
-                    <h3 className="text-lg font-medium text-slate-900">Aucun résultat</h3>
-                    <p className="text-slate-500 mb-4 text-sm max-w-sm mx-auto mt-1">
-                      {clients.length === 0 ? "Vous n'avez pas encore de clients dans votre base de données." : "Aucun client ne correspond à votre recherche."}
-                    </p>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   </td>
                 </tr>
               ) : (
                 filteredClients.map((client) => (
-                  <tr key={client._id} className="border-b border-slate-100 font-medium hover:bg-slate-50/80 transition-colors group cursor-pointer">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shadow-sm border border-indigo-200">
-                          {client.prenom[0]?.toUpperCase()}{client.nom[0]?.toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-slate-800 font-bold group-hover:text-blue-600 transition-colors">
-                            {client.prenom} {client.nom}
-                          </div>
-                        <div className="flex gap-1 mt-1">
-                          {client.servicesUtilises?.slice(0, 3).map((service: string) => (
-                            <span key={service} className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">
-                              {service}
-                            </span>
-                          ))}
-                          {client.servicesUtilises?.length > 3 && (
-                            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-sm">+{client.servicesUtilises.length - 3}</span>
-                          )}
-                        </div>
+                  <tr key={client._id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-3 text-sm font-medium text-slate-800">{client.nom} {client.prenom}</td>
+                    <td className="px-6 py-3 text-sm text-slate-600">{client.email}</td>
+                    <td className="px-6 py-3 text-sm text-slate-600">{client.telephone || '—'}</td>
+                    <td className="px-6 py-3 text-sm text-slate-600">{client.paysResidence || '—'}</td>
+                    <td className="px-6 py-3 text-sm">
+                      <div className="flex flex-wrap gap-1">
+                        {(client.servicesUtilises || []).map((service: string) => (
+                          <span key={service} className="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-medium">
+                            {service}
+                          </span>
+                        ))}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-slate-700 text-sm font-semibold">{client.email}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className="bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-md text-xs font-bold border border-slate-200">
-                        {client.typeClient?.replace('_', ' ')}
-                      </span>
-                      <span className="text-slate-500 text-xs font-medium">{client.paysResidence}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-slate-600 font-semibold text-sm">
-                      <Phone size={14} className="text-slate-400" />
-                      {client.telephone || <span className="text-slate-300 font-normal italic">Non renseigné</span>}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link href={`/signatures`} className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 flex items-center gap-1.5 text-xs font-bold" title="Créer une demande de signature">
-                        <PenTool size={16} /> Signer
-                      </Link>
-                      <button className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
-                        <MoreVertical size={18} />
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <button className="p-2 hover:bg-slate-200 rounded-lg transition-colors">
+                        <MoreVertical size={16} className="text-slate-400" />
                       </button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
                 ))
               )}
             </tbody>
           </table>
+          {!loading && filteredClients.length === 0 && (
+            <div className="px-6 py-12 text-center text-slate-500">
+              Aucun client trouvé
+            </div>
+          )}
         </div>
       </div>
     </div>

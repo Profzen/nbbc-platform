@@ -120,6 +120,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get('file');
+    const mappingStr = formData.get('mapping');
 
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: 'Fichier CSV requis.' }, { status: 400 });
@@ -134,19 +135,40 @@ export async function POST(request: Request) {
 
     const header = parseCsvLine(lines[0]);
 
-    const indexOf = (name: string) => header.indexOf(name);
+    // Parse custom mapping if provided
+    let customMapping: Record<string, string | null> = {};
+    if (mappingStr && typeof mappingStr === 'string') {
+      try {
+        customMapping = JSON.parse(mappingStr);
+      } catch {
+        // Ignore parsing errors, use auto-detection
+      }
+    }
+
+    // Helper to get column index by name (with custom mapping fallback)
+    const getColumnIndex = (fieldKey: string, defaultNames: string[]): number => {
+      if (customMapping[fieldKey]) {
+        return header.indexOf(customMapping[fieldKey]);
+      }
+      for (const name of defaultNames) {
+        const idx = header.indexOf(name);
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
     const idx = {
-      firstName: indexOf('First Name'),
-      middleName: indexOf('Middle Name'),
-      lastName: indexOf('Last Name'),
-      orgName: indexOf('Organization Name'),
-      email: indexOf('E-mail 1 - Value'),
-      phone1: indexOf('Phone 1 - Value'),
-      phone2: indexOf('Phone 2 - Value'),
-      phone3: indexOf('Phone 3 - Value'),
-      country: indexOf('Address 1 - Country'),
-      customValue: indexOf('Custom Field 1 - Value'),
-      notes: indexOf('Notes'),
+      firstName: getColumnIndex('firstName', ['First Name', 'Prénom', 'firstname']),
+      middleName: getColumnIndex('middleName', ['Middle Name', 'middle_name']),
+      lastName: getColumnIndex('lastName', ['Last Name', 'Nom', 'lastname']),
+      orgName: getColumnIndex('company', ['Organization Name', 'Org', 'Company', 'organisation']),
+      email: getColumnIndex('email', ['E-mail 1 - Value', 'Email', 'E-mail', 'email']),
+      phone1: getColumnIndex('phone', ['Phone 1 - Value', 'Phone', 'Telephone', 'phone']),
+      phone2: getColumnIndex('phone', ['Phone 2 - Value']),
+      phone3: getColumnIndex('phone', ['Phone 3 - Value']),
+      country: getColumnIndex('country', ['Address 1 - Country', 'Country', 'Pays', 'country']),
+      customValue: getColumnIndex('customField', ['Custom Field 1 - Value', 'Custom Field', 'Field', 'Notes']),
+      notes: getColumnIndex('notes', ['Notes', 'Remarques', 'Comments']),
     };
 
     let created = 0;
