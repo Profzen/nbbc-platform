@@ -1,18 +1,65 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, MoreVertical, Users, Phone, PenTool } from 'lucide-react';
+import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers } from 'lucide-react';
+
+type ImportResult = {
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+};
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredClients = clients.filter(c => 
     c.nom?.toLowerCase().includes(searchQuery.toLowerCase()) || 
     c.prenom?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const dashboard = useMemo(() => {
+    const serviceCount = new Map<string, number>();
+    const countryCount = new Map<string, number>();
+    const typeCount = new Map<string, number>();
+
+    clients.forEach((client) => {
+      const services = client.servicesUtilises?.length ? client.servicesUtilises : ['AUTRE'];
+      services.forEach((service: string) => {
+        serviceCount.set(service, (serviceCount.get(service) || 0) + 1);
+      });
+
+      const country = (client.paysResidence || 'INCONNU').toUpperCase();
+      countryCount.set(country, (countryCount.get(country) || 0) + 1);
+
+      const type = client.typeClient || 'PARTICULIER';
+      typeCount.set(type, (typeCount.get(type) || 0) + 1);
+    });
+
+    const byService = Array.from(serviceCount.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    const byCountry = Array.from(countryCount.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+
+    const byType = Array.from(typeCount.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    return { byService, byCountry, byType };
+  }, [clients]);
 
   const fetchClients = () => {
     fetch('/api/clients')
@@ -29,6 +76,39 @@ export default function ClientsPage() {
       });
   };
 
+  const handleCsvImport = async (file: File) => {
+    setImporting(true);
+    setImportMessage('Import en cours...');
+    setImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/clients/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erreur import CSV.');
+      }
+
+      setImportResult(data.data);
+      setImportMessage('Import terminé avec succès.');
+      fetchClients();
+    } catch (error: any) {
+      setImportMessage(error.message || 'Erreur pendant l\'import.');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   useEffect(() => {
     fetchClients();
   }, []);
@@ -39,16 +119,100 @@ export default function ClientsPage() {
       <header className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">Gestion des Clients</h1>
-          <p className="text-slate-500 mt-1">Gérez votre portefeuille de clients et leurs informations liées aux services financiers NBBC.</p>
+          <p className="text-slate-500 mt-1">Gérez votre portefeuille clients et pilotez la répartition par service, type et pays.</p>
         </div>
-        <Link 
-          href="/clients/nouveau" 
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-        >
-          <Plus size={20} />
-          Nouveau Client
-        </Link>
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleCsvImport(file);
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium shadow-sm flex items-center gap-2 disabled:opacity-60"
+          >
+            {importing ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <Upload size={18} />}
+            Importer CSV
+          </button>
+          <Link 
+            href="/clients/nouveau" 
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+          >
+            <Plus size={20} />
+            Nouveau Client
+          </Link>
+        </div>
       </header>
+
+      {(importMessage || importResult) && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {importMessage && <p className="text-sm text-slate-700 font-medium">{importMessage}</p>}
+          {importResult && (
+            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="bg-slate-50 rounded-lg px-3 py-2"><span className="text-slate-500">Lignes</span><p className="font-bold text-slate-800">{importResult.totalRows}</p></div>
+              <div className="bg-emerald-50 rounded-lg px-3 py-2"><span className="text-emerald-600">Créés</span><p className="font-bold text-emerald-700">{importResult.created}</p></div>
+              <div className="bg-blue-50 rounded-lg px-3 py-2"><span className="text-blue-600">Mis à jour</span><p className="font-bold text-blue-700">{importResult.updated}</p></div>
+              <div className="bg-amber-50 rounded-lg px-3 py-2"><span className="text-amber-600">Ignorés</span><p className="font-bold text-amber-700">{importResult.skipped}</p></div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-slate-700">Par Service</h2>
+            <Layers size={16} className="text-slate-400" />
+          </div>
+          <div className="space-y-2">
+            {dashboard.byService.slice(0, 5).map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-600">{item.name}</span>
+                <span className="font-bold text-slate-800">{item.value}</span>
+              </div>
+            ))}
+            {dashboard.byService.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-slate-700">Par Pays</h2>
+            <Globe2 size={16} className="text-slate-400" />
+          </div>
+          <div className="space-y-2">
+            {dashboard.byCountry.slice(0, 5).map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-600">{item.name}</span>
+                <span className="font-bold text-slate-800">{item.value}</span>
+              </div>
+            ))}
+            {dashboard.byCountry.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-slate-700">Par Type Client</h2>
+            <Building2 size={16} className="text-slate-400" />
+          </div>
+          <div className="space-y-2">
+            {dashboard.byType.map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-600">{item.name.replace('_', ' ')}</span>
+                <span className="font-bold text-slate-800">{item.value}</span>
+              </div>
+            ))}
+            {dashboard.byType.length === 0 && <p className="text-sm text-slate-400">Aucune donnée</p>}
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Toolbar */}
