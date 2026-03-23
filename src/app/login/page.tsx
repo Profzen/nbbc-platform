@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { ShieldCheck, Lock } from "lucide-react";
 
 export default function LoginPage() {
@@ -19,7 +18,7 @@ export default function LoginPage() {
     setError("");
 
     const res = await signIn("credentials", {
-      email,
+      email: email.trim().toLowerCase(),
       password,
       redirect: false,
     });
@@ -88,12 +87,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-slate-500 mt-8 font-medium">
-          Pas encore de compte ?{' '}
-          <Link href="/register" className="text-blue-600 hover:text-blue-700 hover:underline">
-            S'inscrire
-          </Link>
-        </p>
       </div>
       <p className="text-slate-400 text-sm mt-8">© {new Date().getFullYear()} Plateforme NBBC. Accès restreint.</p>
     </div>

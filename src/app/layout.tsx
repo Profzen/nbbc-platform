@@ -27,7 +27,7 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const pathname = headersList.get("x-current-path") || "";
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/kyc/") || pathname.startsWith("/sign/");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/kyc/") || pathname.startsWith("/sign/");
 
   return (
     <html lang="fr">

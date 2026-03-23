@@ -16,14 +16,17 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Email et mot de passe requis");
         }
+
+        const normalizedEmail = credentials.email.trim().toLowerCase();
+        const normalizedPassword = credentials.password;
         
         await dbConnect();
-        const user = await User.findOne({ email: credentials.email });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
           throw new Error("Aucun utilisateur trouvé avec cet email");
         }
         
-        const isMatch = await bcrypt.compare(credentials.password, user.password as string);
+        const isMatch = await bcrypt.compare(normalizedPassword, user.password as string);
         if (!isMatch) {
           throw new Error("Mot de passe incorrect");
         }

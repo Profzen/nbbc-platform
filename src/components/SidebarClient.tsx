@@ -17,7 +17,6 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
 
   // Masquer la sidebar sur les pages publiques
   if (pathname.startsWith('/login')) return null;
-  if (pathname.startsWith('/register')) return null;
   if (pathname.startsWith('/kyc/') && pathname.length > 10) return null;
   if (pathname.startsWith('/sign/')) return null;
 
