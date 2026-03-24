@@ -171,9 +171,18 @@ export async function POST(request: Request) {
       notes: getColumnIndex('notes', ['Notes', 'Remarques', 'Comments']),
     };
 
+    // OPTIMIZATION: Load all existing clients ONCE to avoid N+1 queries
+    const allClients = await Client.find({}, { email: 1, telephone: 1, servicesUtilises: 1, paysResidence: 1, prenom: 1, nom: 1 }).lean();
+    const clientByEmail = new Map(allClients.map((c) => [c.email?.toLowerCase() || '', c]));
+    const clientByPhone = new Map(allClients.filter((c) => c.telephone).map((c) => [c.telephone!, c]));
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
+
+    // Prepare bulk operations instead of individual updates/inserts
+    const bulkOps: any[] = [];
+    const usedEmails = new Set(allClients.map((c) => c.email?.toLowerCase()).filter(Boolean));
 
     for (let i = 1; i < lines.length; i++) {
       const row = parseCsvLine(lines[i]);
@@ -202,11 +211,8 @@ export async function POST(request: Request) {
       const paysResidence = (providedCountry || countryFromPhone(phone) || 'INCONNU').toUpperCase();
       const email = explicitEmail || makeImportEmail(prenom, nom, phone, i);
 
-      const query: any[] = [];
-      if (email) query.push({ email });
-      if (phone) query.push({ telephone: phone });
-
-      const existing = query.length > 0 ? await Client.findOne({ $or: query }) : null;
+      // Look up in memory instead of querying DB
+      const existing = clientByEmail.get(email?.toLowerCase()) || (phone ? clientByPhone.get(phone) : null);
 
       if (existing) {
         const mergedServices = Array.from(new Set([...(existing.servicesUtilises || []), ...services]));
@@ -219,26 +225,41 @@ export async function POST(request: Request) {
         if (!existing.prenom && prenom) nextData.prenom = prenom;
         if (!existing.nom && nom) nextData.nom = nom;
 
-        await Client.updateOne({ _id: existing._id }, { $set: nextData });
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: existing._id },
+            update: { $set: nextData },
+          },
+        });
         updated++;
       } else {
-        const emailConflict = await Client.findOne({ email });
-        const safeEmail = emailConflict ? makeImportEmail(prenom, nom, phone, i + 100000) : email;
+        // Check for email collision in already-processed records
+        const safeEmail = usedEmails.has(email?.toLowerCase()) ? makeImportEmail(prenom, nom, phone, i + 100000) : email;
+        usedEmails.add(safeEmail.toLowerCase());
 
-        await Client.create({
-          prenom,
-          nom,
-          email: safeEmail,
-          telephone: phone || undefined,
-          paysResidence,
-          typeClient: 'PARTICULIER',
-          statutKyc: 'EN_ATTENTE',
-          niveauRisque: 'FAIBLE',
-          statutCompte: 'ACTIF',
-          servicesUtilises: services,
+        bulkOps.push({
+          insertOne: {
+            document: {
+              prenom,
+              nom,
+              email: safeEmail,
+              telephone: phone || undefined,
+              paysResidence,
+              typeClient: 'PARTICULIER',
+              statutKyc: 'EN_ATTENTE',
+              niveauRisque: 'FAIBLE',
+              statutCompte: 'ACTIF',
+              servicesUtilises: services,
+            },
+          },
         });
         created++;
       }
+    }
+
+    // Execute all operations in ONE batch (bulkWrite)
+    if (bulkOps.length > 0) {
+      await Client.collection.bulkWrite(bulkOps, { ordered: false });
     }
 
     return NextResponse.json({
