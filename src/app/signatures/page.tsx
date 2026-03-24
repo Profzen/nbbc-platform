@@ -25,8 +25,7 @@ function htmlToEditableText(html: string): string {
 }
 
 export default function SignaturesAdminPage() {
-  const cloudinaryApiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
-  const hasCloudinaryApiKey = Boolean(cloudinaryApiKey);
+  const hasCloudinaryApiKey = Boolean(process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
 
   const [activeTab, setActiveTab] = useState('requests');
   const [loading, setLoading] = useState(true);
@@ -289,7 +288,6 @@ export default function SignaturesAdminPage() {
                         </div>
                       ) : (
                         <CldUploadWidget 
-                          apiKey={cloudinaryApiKey}
                           signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
                           uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
                           onSuccess={(res:any) => setRequestForm({...requestForm, fichierPdfUrl: res.info.secure_url})}
