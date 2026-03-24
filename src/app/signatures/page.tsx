@@ -9,7 +9,25 @@ const TABS = [
   { id: 'templates', label: 'Modèles de Contrats', icon: FileText },
 ];
 
+function htmlToEditableText(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .trim();
+}
+
 export default function SignaturesAdminPage() {
+  const cloudinaryApiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
+  const hasCloudinaryApiKey = Boolean(cloudinaryApiKey);
+
   const [activeTab, setActiveTab] = useState('requests');
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<any[]>([]);
@@ -22,7 +40,7 @@ export default function SignaturesAdminPage() {
   
   // Forms
   const [requestForm, setRequestForm] = useState({ clientId: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' });
-  const [templateForm, setTemplateForm] = useState({ id: '', nom: '', contenuHtml: '' });
+  const [templateForm, setTemplateForm] = useState({ id: '', nom: '', contenuTexte: '' });
 
   // Nouvellement généré
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
@@ -54,7 +72,7 @@ export default function SignaturesAdminPage() {
 
     const res = await fetch(url, {
       method, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom: templateForm.nom, contenuHtml: templateForm.contenuHtml })
+      body: JSON.stringify({ nom: templateForm.nom, contenuTexte: templateForm.contenuTexte })
     });
     
     if (res.ok) {
@@ -111,7 +129,7 @@ export default function SignaturesAdminPage() {
             <Plus size={18} /> Nouvelle Demande
           </button>
         ) : (
-          <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuHtml: '' }); setShowTemplateModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
+          <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuTexte: '' }); setShowTemplateModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
             <Plus size={18} /> Nouveau Modèle
           </button>
         )}
@@ -203,13 +221,13 @@ export default function SignaturesAdminPage() {
                   <p className="text-xs text-slate-400 mb-4">Créé le {new Date(tpl.createdAt).toLocaleDateString()}</p>
                   
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity absolute top-5 right-5">
-                    <button onClick={() => { setTemplateForm({ id: tpl._id, nom: tpl.nom, contenuHtml: tpl.contenuHtml }); setShowTemplateModal(true); }} className="p-2 bg-slate-100 text-slate-600 hover:text-indigo-600 rounded-lg"><Edit3 size={16}/></button>
+                    <button onClick={() => { setTemplateForm({ id: tpl._id, nom: tpl.nom, contenuTexte: tpl.contenuTexte || htmlToEditableText(tpl.contenuHtml || '') }); setShowTemplateModal(true); }} className="p-2 bg-slate-100 text-slate-600 hover:text-indigo-600 rounded-lg"><Edit3 size={16}/></button>
                     <button onClick={() => deleteTemplate(tpl._id)} className="p-2 bg-slate-100 text-slate-600 hover:text-rose-600 rounded-lg"><Trash2 size={16}/></button>
                   </div>
                 </div>
               ))}
               
-              <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuHtml: '' }); setShowTemplateModal(true); }} className="border-2 border-dashed border-slate-200 rounded-xl p-5 hover:border-indigo-400 hover:bg-indigo-50/50 transition flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 min-h-[180px]">
+              <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuTexte: '' }); setShowTemplateModal(true); }} className="border-2 border-dashed border-slate-200 rounded-xl p-5 hover:border-indigo-400 hover:bg-indigo-50/50 transition flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 min-h-[180px]">
                 <Plus size={32} className="mb-2" />
                 <span className="font-bold">Créer un modèle</span>
               </button>
@@ -271,7 +289,9 @@ export default function SignaturesAdminPage() {
                         </div>
                       ) : (
                         <CldUploadWidget 
-                          signatureEndpoint="/api/cloudinary/sign" 
+                          apiKey={cloudinaryApiKey}
+                          signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
+                          uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
                           onSuccess={(res:any) => setRequestForm({...requestForm, fichierPdfUrl: res.info.secure_url})}
                           options={{ clientAllowedFormats: ['pdf'], maxFiles: 1 }}
                         >
@@ -281,6 +301,11 @@ export default function SignaturesAdminPage() {
                             </button>
                           )}
                         </CldUploadWidget>
+                      )}
+                      {!hasCloudinaryApiKey && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                          Configuration Cloudinary publique absente: upload en mode non-signé (upload preset).
+                        </p>
                       )}
                     </div>
                   )}
@@ -323,16 +348,16 @@ export default function SignaturesAdminPage() {
 
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Contenu HTML *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Contenu du contrat *</label>
                   <span className="text-xs text-slate-500">Variables : <code className="bg-slate-100 px-1 rounded text-pink-600">{'{{nom}}'}</code> <code className="bg-slate-100 px-1 rounded text-pink-600">{'{{prenom}}'}</code> <code className="bg-slate-100 px-1 rounded text-pink-600">{'{{email}}'}</code> <code className="bg-slate-100 px-1 rounded text-pink-600">{'{{date}}'}</code></span>
                 </div>
-                <textarea rows={16} value={templateForm.contenuHtml} onChange={e => setTemplateForm({...templateForm, contenuHtml: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-900 text-emerald-400 font-mono text-sm resize-none" placeholder="<h1>Conditions Générales</h1>..." />
+                <textarea rows={16} value={templateForm.contenuTexte} onChange={e => setTemplateForm({...templateForm, contenuTexte: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm resize-none" placeholder="Écrivez votre contrat naturellement ici, sans code HTML..." />
               </div>
             </div>
 
             <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
               <button onClick={() => setShowTemplateModal(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100">Annuler</button>
-              <button onClick={saveTemplate} disabled={!templateForm.nom || !templateForm.contenuHtml} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">Sauvegarder</button>
+              <button onClick={saveTemplate} disabled={!templateForm.nom || !templateForm.contenuTexte} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">Sauvegarder</button>
             </div>
           </div>
         </div>

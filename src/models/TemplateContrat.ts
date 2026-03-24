@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface ITemplateContrat extends Document {
   nom: string;
   contenuHtml: string;
+  contenuTexte?: string;
   actif: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -11,6 +12,7 @@ export interface ITemplateContrat extends Document {
 const TemplateContratSchema = new Schema<ITemplateContrat>({
   nom: { type: String, required: true },
   contenuHtml: { type: String, required: true },
+  contenuTexte: { type: String },
   actif: { type: Boolean, default: true },
 }, { 
   timestamps: true 
