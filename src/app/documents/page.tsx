@@ -5,6 +5,9 @@ import { FileText, Search, User, CheckCircle, Clock } from 'lucide-react';
 import { CldUploadWidget } from 'next-cloudinary';
 
 export default function DocumentsPage() {
+  const cloudinaryApiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
+  const hasCloudinaryApiKey = Boolean(cloudinaryApiKey);
+
   const [clients, setClients] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -125,7 +128,9 @@ export default function DocumentsPage() {
                 </div>
                 
                 <CldUploadWidget 
-                  signatureEndpoint="/api/cloudinary/sign"
+                  apiKey={cloudinaryApiKey}
+                  signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
+                  uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
                   onSuccess={handleUploadSuccess}
                   options={{
                     multiple: true,
@@ -150,6 +155,11 @@ export default function DocumentsPage() {
                     );
                   }}
                 </CldUploadWidget>
+                {!hasCloudinaryApiKey && (
+                  <p className="ml-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Clé Cloudinary publique absente: upload en mode non-signé (upload preset).
+                  </p>
+                )}
               </div>
 
               <div className="flex-1 p-6 overflow-y-auto bg-slate-50/30">
