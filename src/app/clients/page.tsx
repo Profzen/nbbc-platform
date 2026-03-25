@@ -29,9 +29,11 @@ type ColumnMapping = {
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#f97316'];
 
 export default function ClientsPage() {
+  const CLIENTS_PAGE_SIZE = 20;
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(CLIENTS_PAGE_SIZE);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -57,6 +59,8 @@ export default function ClientsPage() {
     c.prenom?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const displayedClients = filteredClients.slice(0, visibleCount);
 
   const dashboard = useMemo(() => {
     const serviceCount = new Map<string, number>();
@@ -430,7 +434,10 @@ export default function ClientsPage() {
               type="text"
               placeholder="Rechercher par nom, prénom ou email..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setVisibleCount(CLIENTS_PAGE_SIZE);
+              }}
               className="bg-transparent flex-1 outline-none text-slate-700 placeholder-slate-400"
             />
           </div>
@@ -456,7 +463,7 @@ export default function ClientsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((client) => (
+                displayedClients.map((client) => (
                   <tr key={client._id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-3 text-sm font-medium text-slate-800">{client.nom} {client.prenom}</td>
                     <td className="px-6 py-3 text-sm text-slate-600">{client.email}</td>
@@ -484,6 +491,19 @@ export default function ClientsPage() {
           {!loading && filteredClients.length === 0 && (
             <div className="px-6 py-12 text-center text-slate-500">
               Aucun client trouvé
+            </div>
+          )}
+          {!loading && filteredClients.length > displayedClients.length && (
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                {displayedClients.length} sur {filteredClients.length} client(s) affiché(s)
+              </p>
+              <button
+                onClick={() => setVisibleCount((prev) => prev + CLIENTS_PAGE_SIZE)}
+                className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100"
+              >
+                Voir plus
+              </button>
             </div>
           )}
         </div>

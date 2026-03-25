@@ -26,6 +26,7 @@ function htmlToEditableText(html: string): string {
 
 export default function SignaturesAdminPage() {
   const hasCloudinaryApiKey = Boolean(process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
+  const CLIENT_SEARCH_LIMIT = 8;
 
   const [activeTab, setActiveTab] = useState('requests');
   const [loading, setLoading] = useState(true);
@@ -38,8 +39,9 @@ export default function SignaturesAdminPage() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   
   // Forms
-  const [requestForm, setRequestForm] = useState({ clientId: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' });
+  const [requestForm, setRequestForm] = useState({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' });
   const [templateForm, setTemplateForm] = useState({ id: '', nom: '', contenuTexte: '' });
+  const [clientSearch, setClientSearch] = useState('');
 
   // Nouvellement généré
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
@@ -88,10 +90,15 @@ export default function SignaturesAdminPage() {
 
   // --- Actions Requests ---
   const generateRequest = async () => {
+    const finalClientNom = requestForm.clientId
+      ? undefined
+      : (requestForm.clientNomLibre || clientSearch).trim() || undefined;
+
     const res = await fetch('/api/signatures/requests/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         clientId: requestForm.clientId,
+        clientNomLibre: finalClientNom,
         titreDocument: requestForm.titre,
         typeSource: requestForm.typeSource,
         templateId: requestForm.templateId || undefined,
@@ -113,6 +120,18 @@ export default function SignaturesAdminPage() {
     alert('Lien copié dans le presse-papiers');
   };
 
+  const clientSearchNormalized = clientSearch.trim().toLowerCase();
+  const filteredClientOptions = clientSearchNormalized
+    ? clients
+        .filter((c) => {
+          const haystack = `${c.nom || ''} ${c.prenom || ''} ${c.email || ''}`.toLowerCase();
+          return haystack.includes(clientSearchNormalized);
+        })
+        .slice(0, CLIENT_SEARCH_LIMIT)
+    : clients.slice(0, CLIENT_SEARCH_LIMIT);
+
+  const hasClientSelection = Boolean(requestForm.clientId || (requestForm.clientNomLibre || clientSearch).trim());
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       
@@ -124,7 +143,7 @@ export default function SignaturesAdminPage() {
         </div>
         
         {activeTab === 'requests' ? (
-          <button onClick={() => { setRequestForm({ clientId: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' }); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
+          <button onClick={() => { setRequestForm({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' }); setClientSearch(''); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
             <Plus size={18} /> Nouvelle Demande
           </button>
         ) : (
@@ -173,8 +192,8 @@ export default function SignaturesAdminPage() {
                       <div className="text-xs text-slate-400">{new Date(req.createdAt).toLocaleDateString('fr-FR')}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-700">{req.clientId?.nom} {req.clientId?.prenom}</div>
-                      <div className="text-xs text-slate-400">{req.clientId?.email}</div>
+                      <div className="font-semibold text-slate-700">{req.clientId ? `${req.clientId?.nom || ''} ${req.clientId?.prenom || ''}`.trim() : req.clientNomLibre || 'Client externe'}</div>
+                      <div className="text-xs text-slate-400">{req.clientId?.email || 'Non enregistré en base'}</div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 text-[10px] font-black tracking-widest uppercase rounded-md border ${
@@ -248,11 +267,38 @@ export default function SignaturesAdminPage() {
               {!generatedLink ? (
                 <>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Client cible *</label>
-                    <select value={requestForm.clientId} onChange={e => setRequestForm({...requestForm, clientId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50">
-                      <option value="">Sélectionnez un client</option>
-                      {clients.map(c => <option key={c._id} value={c._id}>{c.nom} {c.prenom} - {c.email}</option>)}
-                    </select>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Client cible (recherche ou saisie libre) *</label>
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setClientSearch(value);
+                        setRequestForm({ ...requestForm, clientId: '', clientNomLibre: value });
+                      }}
+                      placeholder="Tapez un nom, prénom ou email..."
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50"
+                    />
+                    <div className="mt-2 border border-slate-200 rounded-xl bg-white max-h-44 overflow-y-auto">
+                      {filteredClientOptions.map((c) => (
+                        <button
+                          key={c._id}
+                          type="button"
+                          onClick={() => {
+                            setClientSearch(`${c.nom || ''} ${c.prenom || ''}`.trim());
+                            setRequestForm({ ...requestForm, clientId: c._id, clientNomLibre: '' });
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-slate-50 border-b last:border-b-0 border-slate-100"
+                        >
+                          <p className="text-sm font-semibold text-slate-700">{c.nom} {c.prenom}</p>
+                          <p className="text-xs text-slate-500">{c.email || 'Sans email'}</p>
+                        </button>
+                      ))}
+                      {filteredClientOptions.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-500">Aucun client correspondant. Vous pouvez continuer avec le nom saisi.</p>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Si le client n'existe pas, laissez juste le nom saisi pour créer une demande externe.</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Titre de la demande *</label>
@@ -308,7 +354,7 @@ export default function SignaturesAdminPage() {
                     </div>
                   )}
 
-                  <button onClick={generateRequest} disabled={!requestForm.clientId || !requestForm.titre || (requestForm.typeSource === 'TEMPLATE' ? !requestForm.templateId : !requestForm.fichierPdfUrl)} className="w-full py-3.5 mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">
+                  <button onClick={generateRequest} disabled={!hasClientSelection || !requestForm.titre || (requestForm.typeSource === 'TEMPLATE' ? !requestForm.templateId : !requestForm.fichierPdfUrl)} className="w-full py-3.5 mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">
                      Générer le lien de signature
                   </button>
                 </>

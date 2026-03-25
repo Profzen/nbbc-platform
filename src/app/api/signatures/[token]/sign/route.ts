@@ -34,8 +34,8 @@ export async function POST(request: Request, context: { params: Promise<{ token:
 
     await signatureRequest.save();
 
-    // -- Ajout automatique du document signé au client --
-    const client = await Client.findById(signatureRequest.clientId);
+    // -- Ajout automatique du document signé au client (si lié à la base) --
+    const client = signatureRequest.clientId ? await Client.findById(signatureRequest.clientId) : null;
     if (client) {
       client.documents.push({
         nom: `Contrat Signé - ${signatureRequest.titreDocument}`,

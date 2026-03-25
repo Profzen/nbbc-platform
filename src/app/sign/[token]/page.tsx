@@ -14,6 +14,7 @@ export default function SignaturePage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
+  const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
 
   useEffect(() => {
     fetchData();
@@ -110,7 +111,7 @@ export default function SignaturePage() {
             <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle size={48} />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 mb-3">Merci, {data.clientId.prenom} !</h1>
+            <h1 className="text-2xl font-black text-slate-800 mb-3">Merci, {recipientDisplayName} !</h1>
             <p className="text-slate-500 mb-6">Votre signature a bien été enregistrée et transmise à nos équipes sécurisées.</p>
             <p className="text-sm text-slate-400">Vous pouvez fermer cette page.</p>
           </div>

@@ -9,16 +9,25 @@ export async function POST(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
-    const { clientId, typeSource, templateId, fichierPdfUrl, titreDocument } = body;
+    const { clientId, clientNomLibre, typeSource, templateId, fichierPdfUrl, titreDocument } = body;
 
-    if (!clientId || !typeSource || !titreDocument) {
+    if ((!clientId && !clientNomLibre) || !typeSource || !titreDocument) {
       return NextResponse.json({ success: false, error: 'Paramètres manquants' }, { status: 400 });
     }
 
-    const client = await Client.findById(clientId);
-    if (!client) {
-      return NextResponse.json({ success: false, error: 'Client introuvable' }, { status: 404 });
+    let client: any = null;
+    if (clientId) {
+      client = await Client.findById(clientId);
+      if (!client) {
+        return NextResponse.json({ success: false, error: 'Client introuvable' }, { status: 404 });
+      }
     }
+
+    const nomLibreNettoye = typeof clientNomLibre === 'string' ? clientNomLibre.trim() : '';
+
+    const nomComplet = client ? `${client.nom || ''} ${client.prenom || ''}`.trim() : nomLibreNettoye;
+    const [nomLibre, ...restPrenomLibre] = nomComplet.split(/\s+/).filter(Boolean);
+    const prenomLibre = restPrenomLibre.join(' ');
 
     let contenuGele = undefined;
 
@@ -31,10 +40,10 @@ export async function POST(request: Request) {
 
       // Fusion des données de base du client dans le HTML
       contenuGele = template.contenuHtml
-        .replace(/\{\{nom\}\}/gi, client.nom || '')
-        .replace(/\{\{prenom\}\}/gi, client.prenom || '')
-        .replace(/\{\{email\}\}/gi, client.email || '')
-        .replace(/\{\{pays\}\}/gi, client.paysResidence || '')
+        .replace(/\{\{nom\}\}/gi, client?.nom || nomLibre || '')
+        .replace(/\{\{prenom\}\}/gi, client?.prenom || prenomLibre || '')
+        .replace(/\{\{email\}\}/gi, client?.email || '')
+        .replace(/\{\{pays\}\}/gi, client?.paysResidence || '')
         .replace(/\{\{date\}\}/gi, new Date().toLocaleDateString('fr-FR'));
     } 
     // Sinon c'est un UPLOAD
@@ -51,7 +60,8 @@ export async function POST(request: Request) {
 
     const signatureRequest = await SignatureRequest.create({
       token,
-      clientId,
+      clientId: client?._id,
+      clientNomLibre: !client ? nomLibreNettoye : undefined,
       titreDocument,
       typeSource,
       templateId: typeSource === 'TEMPLATE' ? templateId : undefined,

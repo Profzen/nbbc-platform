@@ -2,7 +2,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ISignatureRequest extends Document {
   token: string;
-  clientId: mongoose.Types.ObjectId;
+  clientId?: mongoose.Types.ObjectId;
+  clientNomLibre?: string;
   titreDocument: string;
   typeSource: 'TEMPLATE' | 'UPLOAD';
   templateId?: mongoose.Types.ObjectId;
@@ -20,7 +21,8 @@ export interface ISignatureRequest extends Document {
 
 const SignatureRequestSchema = new Schema<ISignatureRequest>({
   token: { type: String, required: true, unique: true },
-  clientId: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
+  clientId: { type: Schema.Types.ObjectId, ref: 'Client' },
+  clientNomLibre: { type: String },
   titreDocument: { type: String, required: true },
   typeSource: { type: String, enum: ['TEMPLATE', 'UPLOAD'], required: true },
   templateId: { type: Schema.Types.ObjectId, ref: 'TemplateContrat' },
