@@ -337,7 +337,7 @@ export default function SignaturesAdminPage() {
                           signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
                           uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
                           onSuccess={(res:any) => setRequestForm({...requestForm, fichierPdfUrl: res.info.secure_url})}
-                          options={{ clientAllowedFormats: ['pdf'], maxFiles: 1 }}
+                          options={{ clientAllowedFormats: ['pdf'], maxFiles: 1, resourceType: 'raw' }}
                         >
                           {({ open }) => (
                             <button onClick={(_)=>open()} className="w-full py-8 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50 flex flex-col items-center text-indigo-600 hover:bg-indigo-100 transition">

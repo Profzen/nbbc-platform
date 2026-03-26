@@ -1,28 +1,37 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import SignatureCanvas from 'react-signature-canvas';
 import { PenTool, CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
 
 export default function SignaturePage() {
   const params = useParams();
-  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
+  const token = Array.isArray(params.token) ? params.token[0] : params.token;
+  const documentProxyUrl = token ? `/api/signatures/${token}/document` : '';
 
   useEffect(() => {
     fetchData();
-  }, [params.token]);
+  }, [token]);
 
   const fetchData = async () => {
+    if (!token) {
+      setError('Lien de signature invalide.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/signatures/${params.token}`);
+      const res = await fetch(`/api/signatures/${token}`);
       const json = await res.json();
       if (json.success) setData(json.data);
       else setError(json.error);
@@ -37,12 +46,45 @@ export default function SignaturePage() {
     sigCanvas.current?.clear();
   };
 
+  const downloadDocument = async () => {
+    if (!documentProxyUrl) {
+      setActionError('Lien de document invalide.');
+      return;
+    }
+
+    setActionError(null);
+    setDownloading(true);
+    try {
+      const response = await fetch(`${documentProxyUrl}?download=1`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'Impossible de télécharger le document.');
+      }
+
+      const blob = await response.blob();
+      const fileName = `${(data?.titreDocument || 'document').replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e: any) {
+      setActionError(e?.message || 'Erreur pendant le téléchargement.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const submitSignature = async () => {
     if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
       alert('Veuillez dessiner votre signature avant de confirmer.');
       return;
     }
 
+    setActionError(null);
     setSubmitting(true);
     try {
       // 1. Convertir le canvas en image base64
@@ -52,9 +94,30 @@ export default function SignaturePage() {
       const blob = await (await fetch(signatureDataUrl)).blob();
       const fd = new FormData();
       fd.append('file', blob, 'signature.png');
-      fd.append('upload_preset', 'ml_default');
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signRes = await fetch('/api/cloudinary/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paramsToSign: {
+            timestamp,
+            folder: 'signatures'
+          }
+        })
+      });
 
-      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+      if (!signRes.ok) {
+        const signPayload = await signRes.json().catch(() => null);
+        throw new Error(signPayload?.error || 'Signature Cloudinary impossible. Vérifiez la configuration serveur.');
+      }
+
+      const signData = await signRes.json();
+      fd.append('api_key', signData.apiKey);
+      fd.append('timestamp', String(timestamp));
+      fd.append('signature', signData.signature);
+      fd.append('folder', 'signatures');
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`, {
         method: 'POST',
         body: fd
       });
@@ -66,7 +129,7 @@ export default function SignaturePage() {
       }
 
       // 3. Valider la signature côté backend NBBC
-      const res = await fetch(`/api/signatures/${params.token}/sign`, {
+      const res = await fetch(`/api/signatures/${token}/sign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,11 +140,11 @@ export default function SignaturePage() {
 
       const json = await res.json();
       if (json.success) setSuccess(true);
-      else setError(json.error || "Erreur lors de la validation finale.");
+      else setActionError(json.error || "Erreur lors de la validation finale.");
 
     } catch (e: any) {
       console.error('Erreur signature:', e);
-      setError("Erreur technique : " + (e.message || 'Vérifiez la console pour plus de détails.'));
+      setActionError("Erreur technique : " + (e.message || 'Vérifiez la console pour plus de détails.'));
     } finally {
       setSubmitting(false);
     }
@@ -89,7 +152,7 @@ export default function SignaturePage() {
 
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">Chargement sécurisé...</div>;
 
-  if (error || data?.statut !== 'EN_ATTENTE') return (
+  if ((error && !data) || (data?.statut && data.statut !== 'EN_ATTENTE')) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center border border-slate-200">
         <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 ${data?.statut === 'SIGNE' || success ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
@@ -133,9 +196,14 @@ export default function SignaturePage() {
             <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-700">{data.titreDocument}</h2>
               {data.typeSource === 'UPLOAD' && (
-                <a href={data.fichierPdfUrl} target="_blank" className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800">
-                  <Download size={16} /> Télécharger
-                </a>
+                <button
+                  type="button"
+                  onClick={downloadDocument}
+                  disabled={downloading}
+                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800 disabled:opacity-60"
+                >
+                  <Download size={16} /> {downloading ? 'Téléchargement...' : 'Télécharger'}
+                </button>
               )}
             </div>
             
@@ -144,7 +212,7 @@ export default function SignaturePage() {
                 {data.typeSource === 'TEMPLATE' ? (
                   <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-a:text-indigo-600" dangerouslySetInnerHTML={{ __html: data.contenuGele || '' }} />
                 ) : (
-                  <iframe src={data.fichierPdfUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
+                  <iframe src={documentProxyUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
                 )}
               </div>
             </div>
@@ -155,6 +223,12 @@ export default function SignaturePage() {
               <PenTool size={20} className="text-indigo-600" />
               <h3 className="font-bold text-lg">Votre signature</h3>
             </div>
+
+            {actionError && (
+              <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {actionError}
+              </div>
+            )}
             
             <div className="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 relative overflow-hidden group">
               <SignatureCanvas 
