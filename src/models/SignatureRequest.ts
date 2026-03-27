@@ -8,6 +8,10 @@ export interface ISignatureRequest extends Document {
   typeSource: 'TEMPLATE' | 'UPLOAD';
   templateId?: mongoose.Types.ObjectId;
   fichierPdfUrl?: string; // Si upload Cloudinary
+  fichierPdfPublicId?: string;
+  fichierPdfResourceType?: string;
+  fichierPdfDeliveryType?: string;
+  fichierPdfFormat?: string;
   contenuGele?: string;   // Si HTML issu d'un template, on "fige" les variables
   statut: 'EN_ATTENTE' | 'SIGNE' | 'ANNULE';
   signatureImagePublicId?: string; // Image finale stockée sur cloudinary
@@ -27,6 +31,10 @@ const SignatureRequestSchema = new Schema<ISignatureRequest>({
   typeSource: { type: String, enum: ['TEMPLATE', 'UPLOAD'], required: true },
   templateId: { type: Schema.Types.ObjectId, ref: 'TemplateContrat' },
   fichierPdfUrl: { type: String },
+  fichierPdfPublicId: { type: String },
+  fichierPdfResourceType: { type: String },
+  fichierPdfDeliveryType: { type: String },
+  fichierPdfFormat: { type: String },
   contenuGele: { type: String },
   statut: { type: String, enum: ['EN_ATTENTE', 'SIGNE', 'ANNULE'], default: 'EN_ATTENTE' },
   signatureImagePublicId: { type: String },

@@ -39,7 +39,18 @@ export default function SignaturesAdminPage() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   
   // Forms
-  const [requestForm, setRequestForm] = useState({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' });
+  const [requestForm, setRequestForm] = useState({
+    clientId: '',
+    clientNomLibre: '',
+    titre: '',
+    typeSource: 'TEMPLATE',
+    templateId: '',
+    fichierPdfUrl: '',
+    fichierPdfPublicId: '',
+    fichierPdfResourceType: '',
+    fichierPdfDeliveryType: '',
+    fichierPdfFormat: '',
+  });
   const [templateForm, setTemplateForm] = useState({ id: '', nom: '', contenuTexte: '' });
   const [clientSearch, setClientSearch] = useState('');
 
@@ -103,6 +114,10 @@ export default function SignaturesAdminPage() {
         typeSource: requestForm.typeSource,
         templateId: requestForm.templateId || undefined,
         fichierPdfUrl: requestForm.fichierPdfUrl || undefined,
+        fichierPdfPublicId: requestForm.fichierPdfPublicId || undefined,
+        fichierPdfResourceType: requestForm.fichierPdfResourceType || undefined,
+        fichierPdfDeliveryType: requestForm.fichierPdfDeliveryType || undefined,
+        fichierPdfFormat: requestForm.fichierPdfFormat || undefined,
       })
     });
     const data = await res.json();
@@ -143,7 +158,7 @@ export default function SignaturesAdminPage() {
         </div>
         
         {activeTab === 'requests' ? (
-          <button onClick={() => { setRequestForm({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '' }); setClientSearch(''); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
+          <button onClick={() => { setRequestForm({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '', fichierPdfPublicId: '', fichierPdfResourceType: '', fichierPdfDeliveryType: '', fichierPdfFormat: '' }); setClientSearch(''); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
             <Plus size={18} /> Nouvelle Demande
           </button>
         ) : (
@@ -330,14 +345,24 @@ export default function SignaturesAdminPage() {
                       {requestForm.fichierPdfUrl ? (
                         <div className="bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl border border-emerald-200 font-medium flex justify-between items-center">
                           <span>✅ PDF Uploadé avec succès</span>
-                          <button onClick={()=> setRequestForm({...requestForm, fichierPdfUrl: ''})} className="text-emerald-900"><X size={16}/></button>
+                          <button onClick={()=> setRequestForm({...requestForm, fichierPdfUrl: '', fichierPdfPublicId: '', fichierPdfResourceType: '', fichierPdfDeliveryType: '', fichierPdfFormat: ''})} className="text-emerald-900"><X size={16}/></button>
                         </div>
                       ) : (
                         <CldUploadWidget 
                           signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
                           uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
-                          onSuccess={(res:any) => setRequestForm({...requestForm, fichierPdfUrl: res.info.secure_url})}
-                          options={{ clientAllowedFormats: ['pdf'], maxFiles: 1, resourceType: 'raw' }}
+                          onSuccess={(res:any) => {
+                            const info = res?.info || {};
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              fichierPdfUrl: info.secure_url || '',
+                              fichierPdfPublicId: info.public_id || '',
+                              fichierPdfResourceType: info.resource_type || 'raw',
+                              fichierPdfDeliveryType: info.type || 'upload',
+                              fichierPdfFormat: info.format || 'pdf',
+                            }));
+                          }}
+                          options={{ clientAllowedFormats: ['pdf'], maxFiles: 1, resourceType: 'raw', type: 'upload' }}
                         >
                           {({ open }) => (
                             <button onClick={(_)=>open()} className="w-full py-8 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50 flex flex-col items-center text-indigo-600 hover:bg-indigo-100 transition">

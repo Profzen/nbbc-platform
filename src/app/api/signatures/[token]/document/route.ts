@@ -10,6 +10,13 @@ type ParsedCloudinaryUrl = {
   format: string;
 };
 
+type CandidateAsset = {
+  publicId: string;
+  resourceType: string;
+  deliveryType: string;
+  format: string;
+};
+
 function parseCloudinaryUrl(fileUrl: string): ParsedCloudinaryUrl | null {
   try {
     const url = new URL(fileUrl);
@@ -64,6 +71,54 @@ async function fetchFromCandidateUrls(urls: string[]) {
   return null;
 }
 
+function buildSignedCandidateUrls(asset: CandidateAsset) {
+  const expiresAt = Math.floor(Date.now() / 1000) + 300;
+
+  const resourceTypes = Array.from(new Set([asset.resourceType, 'image', 'raw']));
+  const deliveryTypes = Array.from(new Set([asset.deliveryType, 'upload', 'private', 'authenticated']));
+
+  const urls: string[] = [];
+
+  for (const resourceType of resourceTypes) {
+    for (const deliveryType of deliveryTypes) {
+      urls.push(
+        cloudinary.utils.private_download_url(asset.publicId, asset.format, {
+          resource_type: resourceType,
+          type: deliveryType,
+          expires_at: expiresAt,
+          attachment: true,
+        })
+      );
+
+      urls.push(
+        cloudinary.url(asset.publicId, {
+          secure: true,
+          sign_url: true,
+          resource_type: resourceType,
+          type: deliveryType,
+          format: asset.format,
+        })
+      );
+    }
+  }
+
+  return urls;
+}
+
+function buildPreviewImageUrl(asset: CandidateAsset) {
+  return cloudinary.url(asset.publicId, {
+    secure: true,
+    resource_type: 'image',
+    type: asset.deliveryType || 'upload',
+    transformation: [
+      {
+        format: 'png',
+        page: 1,
+      },
+    ],
+  });
+}
+
 export async function GET(request: Request, context: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await context.params;
@@ -87,6 +142,23 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
     const apiKey = process.env.CLOUDINARY_API_KEY || process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
+    const asset: CandidateAsset = {
+      publicId: String(signatureRequest.fichierPdfPublicId || ''),
+      resourceType: String(signatureRequest.fichierPdfResourceType || 'image'),
+      deliveryType: String(signatureRequest.fichierPdfDeliveryType || 'upload'),
+      format: String(signatureRequest.fichierPdfFormat || 'pdf'),
+    };
+
+    if (!asset.publicId) {
+      const parsed = parseCloudinaryUrl(signatureRequest.fichierPdfUrl);
+      if (parsed) {
+        asset.publicId = parsed.publicId;
+        asset.resourceType = parsed.resourceType;
+        asset.deliveryType = parsed.deliveryType;
+        asset.format = parsed.format;
+      }
+    }
+
     if (cloudName && apiKey && apiSecret) {
       cloudinary.config({
         cloud_name: cloudName,
@@ -94,39 +166,46 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
         api_secret: apiSecret,
       });
 
-      const parsed = parseCloudinaryUrl(signatureRequest.fichierPdfUrl);
-      if (parsed) {
-        const expiresAt = Math.floor(Date.now() / 1000) + 300;
-
-        candidateUrls.push(
-          cloudinary.utils.private_download_url(parsed.publicId, parsed.format, {
-            resource_type: parsed.resourceType,
-            type: parsed.deliveryType,
-            expires_at: expiresAt,
-          })
-        );
-
-        candidateUrls.push(
-          cloudinary.url(parsed.publicId, {
-            secure: true,
-            sign_url: true,
-            resource_type: parsed.resourceType,
-            type: parsed.deliveryType,
-            format: parsed.format,
-          })
-        );
+      if (asset.publicId) {
+        candidateUrls.push(...buildSignedCandidateUrls(asset));
       }
     }
 
     const upstreamResponse = await fetchFromCandidateUrls(candidateUrls);
     if (!upstreamResponse) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Impossible de récupérer le PDF (accès Cloudinary refusé).',
-        },
-        { status: 502 }
-      );
+      if (!shouldDownload && cloudName && asset.publicId) {
+        const previewImageUrl = buildPreviewImageUrl(asset);
+        const fallbackHtml = `<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aperçu du document</title>
+    <style>
+      body { margin: 0; font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; }
+      .wrap { padding: 24px; }
+      .alert { background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; }
+      img { width: 100%; max-width: 960px; display: block; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; background: white; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="alert">Aperçu PDF direct indisponible. Affichage de la première page en image.</div>
+      <img src="${previewImageUrl}" alt="Aperçu du document" />
+    </div>
+  </body>
+</html>`;
+
+        return new NextResponse(fallbackHtml, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'private, max-age=60',
+          },
+        });
+      }
+
+      return NextResponse.json({ success: false, error: 'Impossible de récupérer le PDF (accès Cloudinary refusé).' }, { status: 502 });
     }
 
     const fileBuffer = await upstreamResponse.arrayBuffer();

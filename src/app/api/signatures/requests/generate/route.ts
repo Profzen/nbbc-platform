@@ -9,7 +9,18 @@ export async function POST(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
-    const { clientId, clientNomLibre, typeSource, templateId, fichierPdfUrl, titreDocument } = body;
+    const {
+      clientId,
+      clientNomLibre,
+      typeSource,
+      templateId,
+      fichierPdfUrl,
+      fichierPdfPublicId,
+      fichierPdfResourceType,
+      fichierPdfDeliveryType,
+      fichierPdfFormat,
+      titreDocument,
+    } = body;
 
     if ((!clientId && !clientNomLibre) || !typeSource || !titreDocument) {
       return NextResponse.json({ success: false, error: 'Paramètres manquants' }, { status: 400 });
@@ -66,6 +77,10 @@ export async function POST(request: Request) {
       typeSource,
       templateId: typeSource === 'TEMPLATE' ? templateId : undefined,
       fichierPdfUrl: typeSource === 'UPLOAD' ? fichierPdfUrl : undefined,
+      fichierPdfPublicId: typeSource === 'UPLOAD' ? fichierPdfPublicId : undefined,
+      fichierPdfResourceType: typeSource === 'UPLOAD' ? fichierPdfResourceType : undefined,
+      fichierPdfDeliveryType: typeSource === 'UPLOAD' ? fichierPdfDeliveryType : undefined,
+      fichierPdfFormat: typeSource === 'UPLOAD' ? fichierPdfFormat : undefined,
       contenuGele,
       statut: 'EN_ATTENTE'
     });

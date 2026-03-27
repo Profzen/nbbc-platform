@@ -23,6 +23,20 @@ export default function SignaturePage() {
     fetchData();
   }, [token]);
 
+  const readJsonSafely = async (response: Response, fallbackMessage: string) => {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const rawText = await response.text();
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+  };
+
   const fetchData = async () => {
     if (!token) {
       setError('Lien de signature invalide.');
@@ -32,7 +46,7 @@ export default function SignaturePage() {
 
     try {
       const res = await fetch(`/api/signatures/${token}`);
-      const json = await res.json();
+      const json = await readJsonSafely(res, 'Réponse invalide du serveur.');
       if (json.success) setData(json.data);
       else setError(json.error);
     } catch (e: any) {
@@ -107,11 +121,11 @@ export default function SignaturePage() {
       });
 
       if (!signRes.ok) {
-        const signPayload = await signRes.json().catch(() => null);
+        const signPayload = await readJsonSafely(signRes, 'Signature Cloudinary impossible.').catch(() => null);
         throw new Error(signPayload?.error || 'Signature Cloudinary impossible. Vérifiez la configuration serveur.');
       }
 
-      const signData = await signRes.json();
+      const signData = await readJsonSafely(signRes, 'Réponse Cloudinary invalide.');
       fd.append('api_key', signData.apiKey);
       fd.append('timestamp', String(timestamp));
       fd.append('signature', signData.signature);
@@ -121,7 +135,7 @@ export default function SignaturePage() {
         method: 'POST',
         body: fd
       });
-      const uploadData = await uploadRes.json();
+      const uploadData = await readJsonSafely(uploadRes, 'Réponse Cloudinary invalide pendant upload.');
 
       if (!uploadData.secure_url) {
         console.error('Cloudinary error:', uploadData);
@@ -138,7 +152,7 @@ export default function SignaturePage() {
         })
       });
 
-      const json = await res.json();
+      const json = await readJsonSafely(res, 'Réponse invalide lors de la validation de signature.');
       if (json.success) setSuccess(true);
       else setActionError(json.error || "Erreur lors de la validation finale.");
 
