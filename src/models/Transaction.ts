@@ -11,6 +11,11 @@ export interface ITransaction extends Document {
   montant: number;          // Total = quantite * prixUnitaire (ou montant direct)
   compte?: string;          // Ex: "Caisse", "Banque", "CB"
   tiers?: string;           // Fournisseur (achat), Client (vente), Créancier (dette)
+  txCurrency?: string;
+  amountFCFA?: number;
+  rateUsed?: number;
+  accountDebitId?: mongoose.Types.ObjectId;
+  accountCreditId?: mongoose.Types.ObjectId;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -25,6 +30,11 @@ const TransactionSchema = new Schema<ITransaction>({
   montant: { type: Number, required: true },
   compte: { type: String },
   tiers: { type: String },
+  txCurrency: { type: String, default: 'FCFA' },
+  amountFCFA: { type: Number },
+  rateUsed: { type: Number },
+  accountDebitId: { type: Schema.Types.ObjectId, ref: 'Compte' },
+  accountCreditId: { type: Schema.Types.ObjectId, ref: 'Compte' },
   notes: { type: String },
 }, {
   timestamps: true

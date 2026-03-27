@@ -1,494 +1,1161 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, ShoppingCart, Receipt, Wallet, CreditCard, Plus, X, Trash2, Search, BarChart3, BookOpen, ArrowDownCircle, ArrowUpCircle, Landmark, Edit3 } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import {
+  ArrowDownCircle,
+  ArrowLeftRight,
+  ArrowUpCircle,
+  BarChart3,
+  CheckSquare,
+  CreditCard,
+  Edit3,
+  FileDown,
+  Landmark,
+  Plus,
+  Receipt,
+  RefreshCw,
+  Search,
+  ShoppingCart,
+  Trash2,
+  TrendingUp,
+  Wallet,
+  X,
+} from 'lucide-react';
+import {
+  computeComptabiliteSummary,
+  formatCurrencyFCFA,
+  formatNumber,
+  getAccountId,
+  type AccountingCompte,
+  type AccountingDepot,
+  type AccountingTransaction,
+  type AccountingTransactionType,
+} from '@/lib/accounting';
 
-type TxType = 'ACHAT' | 'VENTE' | 'DEPENSE' | 'DETTE';
+const DEFAULT_USD_RATE = 590;
 
-const TX_TABS = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'ACHAT', label: 'Achats', icon: ShoppingCart },
-  { id: 'VENTE', label: 'Ventes', icon: TrendingUp },
-  { id: 'DEPENSE', label: 'Dépenses', icon: Receipt },
-  { id: 'DETTE', label: 'Dettes', icon: CreditCard },
-  { id: 'DEPOT', label: 'Dépôts / Retraits', icon: ArrowDownCircle },
-  { id: 'COMPTES', label: 'Gestion de Comptes', icon: Landmark },
-];
+type SectionId = 'dashboard' | 'achats' | 'ventes' | 'depenses' | 'dettes' | 'depots' | 'comptes';
 
-const TYPE_CONFIG = {
-  ACHAT: { label: 'Achat', color: 'bg-blue-50 text-blue-700 border-blue-200', tiersLabel: 'Fournisseur' },
-  VENTE: { label: 'Vente', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', tiersLabel: 'Client' },
-  DEPENSE: { label: 'Dépense', color: 'bg-red-50 text-red-700 border-red-200', tiersLabel: 'Bénéficiaire' },
-  DETTE: { label: 'Dette', color: 'bg-amber-50 text-amber-700 border-amber-200', tiersLabel: 'Créancier' },
+type TxFormState = {
+  editId: string;
+  type: AccountingTransactionType;
+  date: string;
+  description: string;
+  quantite: string;
+  prixUnitaire: string;
+  montant: string;
+  txCurrency: string;
+  accountDebitId: string;
+  accountCreditId: string;
+  tiers: string;
+  notes: string;
 };
 
-const EMPTY_TX = { type: 'ACHAT' as TxType, date: new Date().toISOString().split('T')[0], description: '', quantite: '', prixUnitaire: '', montant: '', compte: '', tiers: '', notes: '' };
-const EMPTY_DEPOT = { type: 'DEPOT' as 'DEPOT'|'RETRAIT', date: new Date().toISOString().split('T')[0], montant: '', operateur: 'Flooz', description: '', notes: '' };
-const EMPTY_COMPTE = { nom: '', type: 'Espèces' as string, solde: '', description: '' };
+type DepotFormState = {
+  editId: string;
+  type: 'DEPOT' | 'RETRAIT';
+  date: string;
+  quantite: string;
+  montantUnitaire: string;
+  compteDebitId: string;
+  compteCreditId: string;
+  operateur: string;
+  description: string;
+  notes: string;
+};
 
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XAF', maximumFractionDigits: 0 }).format(n);
+type CompteFormState = {
+  editId: string;
+  nom: string;
+  type: string;
+  devise: string;
+  tauxFCFA: string;
+  soldeInitialUnites: string;
+  description: string;
+};
+
+const EMPTY_TX_FORM: TxFormState = {
+  editId: '',
+  type: 'ACHAT',
+  date: new Date().toISOString().slice(0, 10),
+  description: '',
+  quantite: '1',
+  prixUnitaire: '0',
+  montant: '0',
+  txCurrency: 'USD',
+  accountDebitId: '',
+  accountCreditId: '',
+  tiers: '',
+  notes: '',
+};
+
+const EMPTY_DEPOT_FORM: DepotFormState = {
+  editId: '',
+  type: 'DEPOT',
+  date: new Date().toISOString().slice(0, 10),
+  quantite: '1',
+  montantUnitaire: '0',
+  compteDebitId: '',
+  compteCreditId: '',
+  operateur: 'Flooz',
+  description: '',
+  notes: '',
+};
+
+const EMPTY_COMPTE_FORM: CompteFormState = {
+  editId: '',
+  nom: '',
+  type: 'Autre',
+  devise: 'FCFA',
+  tauxFCFA: '1',
+  soldeInitialUnites: '0',
+  description: '',
+};
+
+const SECTION_META: Record<SectionId, { label: string; icon: any }> = {
+  dashboard: { label: 'Dashboard Central', icon: BarChart3 },
+  achats: { label: 'Gestion Achats', icon: ShoppingCart },
+  ventes: { label: 'Gestion Ventes', icon: TrendingUp },
+  depenses: { label: 'Gestion Dépenses', icon: Receipt },
+  dettes: { label: 'Gestion Dettes', icon: CreditCard },
+  depots: { label: 'Gestion dépôt/retrait', icon: ArrowLeftRight },
+  comptes: { label: 'Gestion de compte', icon: Landmark },
+};
+
+const TX_TYPE_CONFIG: Record<AccountingTransactionType, { label: string; partyLabel: string; defaultCurrency: string }> = {
+  ACHAT: { label: 'Achat', partyLabel: 'Fournisseur', defaultCurrency: 'USD' },
+  VENTE: { label: 'Vente', partyLabel: 'Client', defaultCurrency: 'USD' },
+  DEPENSE: { label: 'Dépense', partyLabel: 'Bénéficiaire', defaultCurrency: 'FCFA' },
+  DETTE: { label: 'Dette', partyLabel: 'Créancier', defaultCurrency: 'FCFA' },
+};
+
+const DEFAULT_ACCOUNTS = [
+  { nom: 'Caisse (FCFA)', type: 'Espèces', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
+  { nom: 'Flooz', type: 'Mobile Money', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
+  { nom: 'Tmoney', type: 'Mobile Money', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
+  { nom: 'Dollar Cash', type: 'Autre', devise: 'USD', tauxFCFA: DEFAULT_USD_RATE, soldeInitialUnites: 0 },
+  { nom: 'Dollar DG', type: 'Autre', devise: 'USD', tauxFCFA: DEFAULT_USD_RATE, soldeInitialUnites: 0 },
+  { nom: 'Dette', type: 'Autre', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
+];
+
+function normalizeDate(value?: string | Date) {
+  if (!value) return '';
+  return new Date(value).toISOString().slice(0, 10);
 }
 
-const OPERATEURS = ['Flooz', 'T-Money', 'Mobile Money', 'Virement bancaire', 'Espèces', 'Chèque', 'Autre'];
-const COMPTE_TYPES = ['Espèces', 'Banque', 'Mobile Money', 'Chèque', 'Autre'];
+function sanitizePdfText(value: unknown) {
+  return String(value ?? '')
+    .replace(/\u202F|\u00A0/g, ' ')
+    .replace(/\r/g, ' ')
+    .replace(/\n/g, ' ');
+}
 
 export default function ComptabilitePage() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [depots, setDepots] = useState<any[]>([]);
-  const [comptes, setComptes] = useState<any[]>([]);
+  const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [loading, setLoading] = useState(true);
-  
-  // Modals
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+
+  const [transactions, setTransactions] = useState<AccountingTransaction[]>([]);
+  const [depots, setDepots] = useState<AccountingDepot[]>([]);
+  const [comptes, setComptes] = useState<AccountingCompte[]>([]);
+
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [selectedDepotIds, setSelectedDepotIds] = useState<string[]>([]);
+
   const [showTxModal, setShowTxModal] = useState(false);
   const [showDepotModal, setShowDepotModal] = useState(false);
   const [showCompteModal, setShowCompteModal] = useState(false);
-  
-  // Forms
-  const [txForm, setTxForm] = useState({ ...EMPTY_TX });
-  const [depotForm, setDepotForm] = useState({ ...EMPTY_DEPOT });
-  const [compteForm, setCompteForm] = useState({ ...EMPTY_COMPTE, editId: '' });
-  const [search, setSearch] = useState('');
-  const [saving, setSaving] = useState(false);
+
+  const [txForm, setTxForm] = useState<TxFormState>(EMPTY_TX_FORM);
+  const [depotForm, setDepotForm] = useState<DepotFormState>(EMPTY_DEPOT_FORM);
+  const [compteForm, setCompteForm] = useState<CompteFormState>(EMPTY_COMPTE_FORM);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const [r1, r2, r3] = await Promise.all([
-        fetch('/api/comptabilite/transactions').then(r => r.json()),
-        fetch('/api/comptabilite/depots').then(r => r.json()),
-        fetch('/api/comptabilite/comptes').then(r => r.json()),
+      const [transactionsRes, depotsRes, comptesRes] = await Promise.all([
+        fetch('/api/comptabilite/transactions', { cache: 'no-store' }),
+        fetch('/api/comptabilite/depots', { cache: 'no-store' }),
+        fetch('/api/comptabilite/comptes', { cache: 'no-store' }),
       ]);
-      if (r1.success) setTransactions(r1.data);
-      if (r2.success) setDepots(r2.data);
-      if (r3.success) setComptes(r3.data);
+
+      const [transactionsJson, depotsJson, comptesJson] = await Promise.all([
+        transactionsRes.json(),
+        depotsRes.json(),
+        comptesRes.json(),
+      ]);
+
+      if (!transactionsRes.ok || !transactionsJson.success) {
+        throw new Error(transactionsJson.error || 'Impossible de charger les transactions.');
+      }
+      if (!depotsRes.ok || !depotsJson.success) {
+        throw new Error(depotsJson.error || 'Impossible de charger les dépôts/retraits.');
+      }
+      if (!comptesRes.ok || !comptesJson.success) {
+        throw new Error(comptesJson.error || 'Impossible de charger les comptes.');
+      }
+
+      setTransactions(transactionsJson.data || []);
+      setDepots(depotsJson.data || []);
+      setComptes(comptesJson.data || []);
+    } catch (err: any) {
+      setError(err.message || 'Chargement impossible.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-  const filtered = transactions.filter(t => {
-    if (!['dashboard', 'DEPOT', 'COMPTES'].includes(activeTab) && t.type !== activeTab) return false;
-    if (!search || ['dashboard', 'DEPOT', 'COMPTES'].includes(activeTab)) return true;
-    const s = search.toLowerCase();
-    return t.description?.toLowerCase().includes(s) || t.tiers?.toLowerCase().includes(s);
+  const summary = computeComptabiliteSummary(comptes, transactions, depots);
+  const displayAccounts = [...summary.comptes].sort((a, b) => Number(a.ordre || 0) - Number(b.ordre || 0) || String(a.nom).localeCompare(String(b.nom)));
+
+  const transactionSearch = search.trim().toLowerCase();
+  const filteredTransactions = summary.transactions.filter((tx) => {
+    const sectionType = activeSection === 'achats' ? 'ACHAT' : activeSection === 'ventes' ? 'VENTE' : activeSection === 'depenses' ? 'DEPENSE' : activeSection === 'dettes' ? 'DETTE' : null;
+    if (!sectionType) return false;
+    if (tx.type !== sectionType) return false;
+    if (!transactionSearch) return true;
+    return [tx.description, tx.tiers, tx.date, tx.notes]
+      .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
   });
 
-  const filteredDepots = depots.filter(d => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return d.operateur?.toLowerCase().includes(s) || d.description?.toLowerCase().includes(s);
+  const filteredDepots = summary.depots.filter((item) => {
+    if (!transactionSearch) return true;
+    return [item.operateur, item.description, item.date, item.notes]
+      .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
   });
 
-  // KPIs
-  const totalByType = (type: TxType) => transactions.filter(t => t.type === type).reduce((a, t) => a + t.montant, 0);
-  const ca = totalByType('VENTE');
-  const achats = totalByType('ACHAT');
-  const depenses = totalByType('DEPENSE');
-  const dettes = totalByType('DETTE');
-  const benefice = ca - achats - depenses;
-  const totalDepots = depots.filter(d => d.type === 'DEPOT').reduce((a, d) => a + d.montant, 0);
-  const totalRetraits = depots.filter(d => d.type === 'RETRAIT').reduce((a, d) => a + d.montant, 0);
+  const accountById = (id: string) => displayAccounts.find((account) => account._id === id);
 
-  // Monthly bar chart
-  interface MonthlyDataPoint { month: string; ACHAT: number; VENTE: number; DEPENSE: number; }
-  
-  const getMonthlyData = (): MonthlyDataPoint[] => {
-    const months: Record<string, Record<string, number>> = {};
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      months[key] = { ACHAT: 0, VENTE: 0, DEPENSE: 0 };
+  const clearFlash = () => {
+    setError('');
+    setMessage('');
+  };
+
+  const initializeDefaultAccounts = async () => {
+    clearFlash();
+    setSaving(true);
+    try {
+      for (let index = 0; index < DEFAULT_ACCOUNTS.length; index += 1) {
+        const account = DEFAULT_ACCOUNTS[index];
+        const res = await fetch('/api/comptabilite/comptes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...account, ordre: index }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Impossible de créer les comptes par défaut.');
+        }
+      }
+      setMessage('Comptes par défaut créés.');
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Impossible de créer les comptes par défaut.');
+    } finally {
+      setSaving(false);
     }
-    transactions.forEach(t => {
-      const d = new Date(t.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (months[key]) {
-        months[key][t.type] = (months[key][t.type] || 0) + t.montant;
-      }
+  };
+
+  const openNewTransactionModal = (type: AccountingTransactionType) => {
+    clearFlash();
+    setTxForm({
+      ...EMPTY_TX_FORM,
+      type,
+      txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
+      montant: '0',
     });
-    return Object.entries(months).map(([k, v]) => ({
-      month: k.slice(5),
-      ACHAT: v.ACHAT || 0,
-      VENTE: v.VENTE || 0,
-      DEPENSE: v.DEPENSE || 0,
-    }));
+    setShowTxModal(true);
   };
-  const monthlyData = getMonthlyData();
-  const maxVal = Math.max(...monthlyData.flatMap(m => [m.ACHAT, m.VENTE, m.DEPENSE]), 1);
 
-  // --- Save Transaction ---
-  const saveTx = async () => {
+  const openEditTransactionModal = (tx: AccountingTransaction) => {
+    clearFlash();
+    setTxForm({
+      editId: tx._id,
+      type: tx.type,
+      date: normalizeDate(tx.date),
+      description: tx.description || '',
+      quantite: String(tx.quantite || ''),
+      prixUnitaire: String(tx.prixUnitaire || ''),
+      montant: String(tx.montant || ''),
+      txCurrency: tx.txCurrency || 'FCFA',
+      accountDebitId: getAccountId(tx.accountDebitId),
+      accountCreditId: getAccountId(tx.accountCreditId),
+      tiers: tx.tiers || '',
+      notes: tx.notes || '',
+    });
+    setShowTxModal(true);
+  };
+
+  const saveTransaction = async (event: FormEvent) => {
+    event.preventDefault();
+    clearFlash();
     setSaving(true);
     try {
-      const payload: any = { ...txForm };
-      if (payload.quantite && payload.prixUnitaire) {
-        payload.quantite = parseFloat(payload.quantite);
-        payload.prixUnitaire = parseFloat(payload.prixUnitaire);
-        payload.montant = payload.quantite * payload.prixUnitaire;
-      } else {
-        payload.montant = parseFloat(payload.montant) || 0;
+      const payload = {
+        type: txForm.type,
+        date: txForm.date,
+        description: txForm.description,
+        quantite: txForm.quantite ? Number(txForm.quantite) : undefined,
+        prixUnitaire: txForm.prixUnitaire ? Number(txForm.prixUnitaire) : undefined,
+        montant: txForm.montant ? Number(txForm.montant) : undefined,
+        txCurrency: txForm.txCurrency,
+        accountDebitId: txForm.accountDebitId || undefined,
+        accountCreditId: txForm.accountCreditId || undefined,
+        tiers: txForm.tiers,
+        notes: txForm.notes,
+      };
+
+      const url = txForm.editId ? `/api/comptabilite/transactions/${txForm.editId}` : '/api/comptabilite/transactions';
+      const method = txForm.editId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Impossible d\'enregistrer la transaction.');
       }
-      const res = await fetch('/api/comptabilite/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (data.success) { setShowTxModal(false); setTxForm({ ...EMPTY_TX }); fetchAll(); }
-    } finally { setSaving(false); }
+
+      setMessage(txForm.editId ? 'Transaction mise à jour.' : 'Transaction créée.');
+      setShowTxModal(false);
+      setTxForm(EMPTY_TX_FORM);
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Impossible d\'enregistrer la transaction.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // --- Save Dépôt/Retrait ---
-  const saveDepot = async () => {
+  const deleteTransaction = async (id: string) => {
+    clearFlash();
+    if (!confirm('Supprimer cette transaction ?')) return;
     setSaving(true);
     try {
-      const payload = { ...depotForm, montant: parseFloat(depotForm.montant) || 0 };
-      const res = await fetch('/api/comptabilite/depots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (data.success) { setShowDepotModal(false); setDepotForm({ ...EMPTY_DEPOT }); fetchAll(); }
-    } finally { setSaving(false); }
+      const res = await fetch(`/api/comptabilite/transactions/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Suppression impossible.');
+      }
+      setMessage('Transaction supprimée.');
+      setSelectedTransactionIds((prev) => prev.filter((item) => item !== id));
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Suppression impossible.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // --- Save/Edit Compte ---
-  const saveCompte = async () => {
+  const deleteSelectedTransactions = async () => {
+    if (selectedTransactionIds.length === 0) return;
+    if (!confirm(`Supprimer ${selectedTransactionIds.length} transaction(s) sélectionnée(s) ?`)) return;
+    clearFlash();
     setSaving(true);
     try {
-      const { editId, ...payload } = compteForm;
-      const url = editId ? `/api/comptabilite/comptes/${editId}` : '/api/comptabilite/comptes';
-      const method = editId ? 'PUT' : 'POST';
-      const body = { ...payload, solde: parseFloat((payload.solde as any) || '0') };
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (data.success) { setShowCompteModal(false); setCompteForm({ ...EMPTY_COMPTE, editId: '' }); fetchAll(); }
-    } finally { setSaving(false); }
+      for (const id of selectedTransactionIds) {
+        const res = await fetch(`/api/comptabilite/transactions/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Suppression groupée impossible.');
+        }
+      }
+      setSelectedTransactionIds([]);
+      setMessage('Transactions supprimées.');
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Suppression groupée impossible.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const deleteTx = async (id: string) => { if (!confirm('Supprimer ?')) return; await fetch(`/api/comptabilite/transactions/${id}`, { method: 'DELETE' }); fetchAll(); };
-  const deleteDepot = async (id: string) => { if (!confirm('Supprimer ?')) return; await fetch(`/api/comptabilite/depots/${id}`, { method: 'DELETE' }); fetchAll(); };
-  const deleteCompte = async (id: string) => { if (!confirm('Désactiver ce compte ?')) return; await fetch(`/api/comptabilite/comptes/${id}`, { method: 'DELETE' }); fetchAll(); };
+  const openNewDepotModal = () => {
+    clearFlash();
+    setDepotForm(EMPTY_DEPOT_FORM);
+    setShowDepotModal(true);
+  };
+
+  const openEditDepotModal = (depot: AccountingDepot) => {
+    clearFlash();
+    setDepotForm({
+      editId: depot._id,
+      type: depot.type,
+      date: normalizeDate(depot.date),
+      quantite: String(depot.quantite || 1),
+      montantUnitaire: String(depot.montantUnitaire || depot.montant || 0),
+      compteDebitId: getAccountId(depot.compteDebitId || depot.compteId),
+      compteCreditId: getAccountId(depot.compteCreditId),
+      operateur: depot.operateur || '',
+      description: depot.description || '',
+      notes: depot.notes || '',
+    });
+    setShowDepotModal(true);
+  };
+
+  const saveDepot = async (event: FormEvent) => {
+    event.preventDefault();
+    clearFlash();
+    setSaving(true);
+    try {
+      const payload = {
+        type: depotForm.type,
+        date: depotForm.date,
+        quantite: Number(depotForm.quantite || 1),
+        montantUnitaire: Number(depotForm.montantUnitaire || 0),
+        compteDebitId: depotForm.compteDebitId || undefined,
+        compteCreditId: depotForm.compteCreditId || undefined,
+        operateur: depotForm.operateur,
+        description: depotForm.description,
+        notes: depotForm.notes,
+      };
+
+      const url = depotForm.editId ? `/api/comptabilite/depots/${depotForm.editId}` : '/api/comptabilite/depots';
+      const method = depotForm.editId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Impossible d\'enregistrer le dépôt/retrait.');
+      }
+
+      setMessage(depotForm.editId ? 'Opération mise à jour.' : 'Opération créée.');
+      setShowDepotModal(false);
+      setDepotForm(EMPTY_DEPOT_FORM);
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Impossible d\'enregistrer le dépôt/retrait.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteDepot = async (id: string) => {
+    clearFlash();
+    if (!confirm('Supprimer cette opération ?')) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/comptabilite/depots/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Suppression impossible.');
+      }
+      setMessage('Opération supprimée.');
+      setSelectedDepotIds((prev) => prev.filter((item) => item !== id));
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Suppression impossible.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSelectedDepots = async () => {
+    if (selectedDepotIds.length === 0) return;
+    if (!confirm(`Supprimer ${selectedDepotIds.length} opération(s) sélectionnée(s) ?`)) return;
+    clearFlash();
+    setSaving(true);
+    try {
+      for (const id of selectedDepotIds) {
+        const res = await fetch(`/api/comptabilite/depots/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Suppression groupée impossible.');
+        }
+      }
+      setSelectedDepotIds([]);
+      setMessage('Opérations supprimées.');
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Suppression groupée impossible.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openNewCompteModal = () => {
+    clearFlash();
+    setCompteForm(EMPTY_COMPTE_FORM);
+    setShowCompteModal(true);
+  };
+
+  const openEditCompteModal = (compte: any) => {
+    clearFlash();
+    setCompteForm({
+      editId: compte._id,
+      nom: compte.nom || '',
+      type: compte.type || 'Autre',
+      devise: compte.devise || 'FCFA',
+      tauxFCFA: String(compte.tauxFCFA || 1),
+      soldeInitialUnites: String(compte.soldeInitialUnites ?? (compte.devise === 'FCFA' ? compte.solde || 0 : 0)),
+      description: compte.description || '',
+    });
+    setShowCompteModal(true);
+  };
+
+  const saveCompte = async (event: FormEvent) => {
+    event.preventDefault();
+    clearFlash();
+    setSaving(true);
+    try {
+      const payload = {
+        nom: compteForm.nom,
+        type: compteForm.type,
+        devise: compteForm.devise,
+        tauxFCFA: Number(compteForm.tauxFCFA || 1),
+        soldeInitialUnites: Number(compteForm.soldeInitialUnites || 0),
+        description: compteForm.description,
+      };
+      const url = compteForm.editId ? `/api/comptabilite/comptes/${compteForm.editId}` : '/api/comptabilite/comptes';
+      const method = compteForm.editId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Impossible d\'enregistrer le compte.');
+      }
+      setMessage(compteForm.editId ? 'Compte mis à jour.' : 'Compte créé.');
+      setShowCompteModal(false);
+      setCompteForm(EMPTY_COMPTE_FORM);
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Impossible d\'enregistrer le compte.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCompte = async (id: string) => {
+    clearFlash();
+    if (!confirm('Supprimer ce libellé ?')) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/comptabilite/comptes/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Suppression impossible.');
+      }
+      setMessage('Compte supprimé.');
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Suppression impossible.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetOneCompte = async (compte: any) => {
+    clearFlash();
+    if (!confirm(`Réinitialiser le libellé ${compte.nom} à 0 ?`)) return;
+    setSaving(true);
+    try {
+      const taux = Number(compte.tauxFCFA || 1);
+      const resetUnits = taux > 0 ? -Number(compte.soldeCalculeFCFA || 0) / taux : 0;
+      const res = await fetch(`/api/comptabilite/comptes/${compte._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: compte.nom,
+          type: compte.type,
+          devise: compte.devise,
+          tauxFCFA: compte.tauxFCFA,
+          soldeInitialUnites: Math.round(resetUnits * 100) / 100,
+          description: compte.description,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Réinitialisation impossible.');
+      }
+      setMessage(`Solde de ${compte.nom} remis à 0.`);
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Réinitialisation impossible.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetAllComptes = async () => {
+    clearFlash();
+    if (!confirm('Réinitialiser tous les comptes à 0 ?')) return;
+    setSaving(true);
+    try {
+      for (const compte of displayAccounts) {
+        const taux = Number(compte.tauxFCFA || 1);
+        const resetUnits = taux > 0 ? -Number(compte.soldeCalculeFCFA || 0) / taux : 0;
+        const res = await fetch(`/api/comptabilite/comptes/${compte._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nom: compte.nom,
+            type: compte.type,
+            devise: compte.devise,
+            tauxFCFA: compte.tauxFCFA,
+            soldeInitialUnites: Math.round(resetUnits * 100) / 100,
+            description: compte.description,
+            ordre: compte.ordre,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Réinitialisation impossible.');
+        }
+      }
+      setMessage('Tous les comptes ont été remis à 0.');
+      await fetchAll();
+    } catch (err: any) {
+      setError(err.message || 'Réinitialisation impossible.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportTransactionsPdf = (type: AccountingTransactionType) => {
+    const doc = new jsPDF('p', 'pt', 'a4') as jsPDF & { autoTable: (...args: any[]) => void; lastAutoTable?: { finalY: number } };
+    const list = summary.transactions.filter((item) => item.type === type);
+    doc.setFontSize(12);
+    doc.text(`Rapport ${TX_TYPE_CONFIG[type].label}s - ${new Date().toLocaleDateString('fr-FR')}`, 40, 30);
+    doc.autoTable({
+      startY: 50,
+      head: [[
+        'Date',
+        type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
+        'Qté',
+        'Prix unitaire',
+        TX_TYPE_CONFIG[type].partyLabel,
+        'Débit',
+        'Crédit',
+        'Total FCFA',
+      ]],
+      body: list.map((item) => {
+        const debit = accountById(getAccountId(item.accountDebitId));
+        const credit = accountById(getAccountId(item.accountCreditId));
+        return [
+          sanitizePdfText(normalizeDate(item.date)),
+          sanitizePdfText(item.description),
+          sanitizePdfText(item.quantite || ''),
+          sanitizePdfText(`${formatNumber(item.prixUnitaire || 0)} ${item.txCurrency || 'FCFA'}`),
+          sanitizePdfText(item.tiers || ''),
+          sanitizePdfText(debit?.nom || ''),
+          sanitizePdfText(credit?.nom || ''),
+          sanitizePdfText(formatCurrencyFCFA(item.amountFCFA || 0)),
+        ];
+      }),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      theme: 'grid',
+    });
+    const finalY = doc.lastAutoTable?.finalY || 70;
+    doc.text(`Total: ${formatCurrencyFCFA(list.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}`, 40, finalY + 20);
+    doc.save(`${type.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const exportDepotsPdf = () => {
+    const doc = new jsPDF('p', 'pt', 'a4') as jsPDF & { autoTable: (...args: any[]) => void; lastAutoTable?: { finalY: number } };
+    doc.setFontSize(12);
+    doc.text(`Rapport Dépôts / Retraits - ${new Date().toLocaleDateString('fr-FR')}`, 40, 30);
+    doc.autoTable({
+      startY: 50,
+      head: [['Date', 'Type', 'Qté', 'Montant unitaire', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA']],
+      body: summary.depots.map((item) => {
+        const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+        const credit = accountById(getAccountId(item.compteCreditId));
+        return [
+          sanitizePdfText(normalizeDate(item.date)),
+          sanitizePdfText(item.type),
+          sanitizePdfText(item.quantite || 1),
+          sanitizePdfText(formatCurrencyFCFA(item.montantUnitaire || 0)),
+          sanitizePdfText(debit?.nom || ''),
+          sanitizePdfText(credit?.nom || ''),
+          sanitizePdfText(item.operateur),
+          sanitizePdfText(formatCurrencyFCFA(item.montant || 0)),
+        ];
+      }),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      theme: 'grid',
+    });
+    const finalY = doc.lastAutoTable?.finalY || 70;
+    doc.text(`Total: ${formatCurrencyFCFA(summary.totals.depots + summary.totals.retraits)}`, 40, finalY + 20);
+    doc.save(`depots_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const exportComptesPdf = () => {
+    const doc = new jsPDF('p', 'pt', 'a4') as jsPDF & { autoTable: (...args: any[]) => void; lastAutoTable?: { finalY: number } };
+    doc.setFontSize(12);
+    doc.text(`Rapport Comptes - ${new Date().toLocaleDateString('fr-FR')}`, 40, 30);
+    doc.autoTable({
+      startY: 50,
+      head: [['Libellé', 'Devise', 'Taux (1 -> FCFA)', 'Solde FCFA', 'Equiv. unités']],
+      body: displayAccounts.map((account) => [
+        sanitizePdfText(account.nom),
+        sanitizePdfText(account.devise || 'FCFA'),
+        sanitizePdfText(formatNumber(account.tauxFCFA || 1)),
+        sanitizePdfText(formatCurrencyFCFA(account.soldeCalculeFCFA || 0)),
+        sanitizePdfText(`${formatNumber(account.equivalentUnits || 0)} ${account.devise || 'FCFA'}`),
+      ]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      theme: 'grid',
+    });
+    let y = (doc.lastAutoTable?.finalY || 70) + 20;
+    doc.text(`Total comptes: ${formatCurrencyFCFA(summary.totals.totalComptes)}`, 40, y);
+    y += 16;
+    doc.text(`Bénéfice: ${formatCurrencyFCFA(summary.totals.benefice)}`, 40, y);
+    y += 16;
+    doc.text(`Dépenses: ${formatCurrencyFCFA(summary.totals.depenses)}`, 40, y);
+    y += 16;
+    doc.text(`Dettes: ${formatCurrencyFCFA(summary.totals.dettes)}`, 40, y);
+    y += 16;
+    doc.text(`Total disponible: ${formatCurrencyFCFA(summary.totals.totalDisponible)}`, 40, y);
+    doc.save(`comptes_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const currentSectionType = activeSection === 'achats' ? 'ACHAT' : activeSection === 'ventes' ? 'VENTE' : activeSection === 'depenses' ? 'DEPENSE' : activeSection === 'dettes' ? 'DETTE' : null;
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-      
-      <header className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <img src="/nbbcl.png" alt="NBBC" className="h-10 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          <div>
-            <h1 className="text-3xl font-black text-slate-800">Comptabilité</h1>
-            <p className="text-slate-500 mt-1">Gestion des transactions & suivi financier</p>
-          </div>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800">{SECTION_META[activeSection].label}</h1>
+          <p className="text-slate-500 mt-1">Synchronisation des achats, ventes, dépenses, dettes, dépôts/retraits et libellés comptables.</p>
         </div>
-        <div className="flex gap-2">
-          {activeTab === 'DEPOT' && (
-            <button onClick={() => { setDepotForm({ ...EMPTY_DEPOT }); setShowDepotModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md shadow-indigo-200 text-sm"><Plus size={16}/> Dépôt/Retrait</button>
-          )}
-          {activeTab === 'COMPTES' && (
-            <button onClick={() => { setCompteForm({ ...EMPTY_COMPTE, editId: '' }); setShowCompteModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md shadow-indigo-200 text-sm"><Plus size={16}/> Nouveau Compte</button>
-          )}
-          {!['DEPOT', 'COMPTES'].includes(activeTab) && (
-            <button onClick={() => { setTxForm({ ...EMPTY_TX, type: (activeTab !== 'dashboard' ? activeTab : 'ACHAT') as TxType }); setShowTxModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md shadow-indigo-200 text-sm"><Plus size={16}/> Nouvelle Transaction</button>
-          )}
+        <div className="flex flex-wrap gap-2">
+          {activeSection === 'achats' && <button onClick={() => openNewTransactionModal('ACHAT')} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvel Achat</button>}
+          {activeSection === 'ventes' && <button onClick={() => openNewTransactionModal('VENTE')} className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-900 shadow-md">+ Nouvelle Vente</button>}
+          {activeSection === 'depenses' && <button onClick={() => openNewTransactionModal('DEPENSE')} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvelle Dépense</button>}
+          {activeSection === 'dettes' && <button onClick={() => openNewTransactionModal('DETTE')} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvelle Dette</button>}
+          {activeSection === 'depots' && <button onClick={openNewDepotModal} className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-black text-slate-900 shadow-md">+ Nouveau dépôt/retrait</button>}
+          {activeSection === 'comptes' && <button onClick={openNewCompteModal} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouveau libellé</button>}
         </div>
       </header>
 
-      {/* TABS */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-2xl overflow-x-auto">
-        {TX_TABS.map(tab => {
-          const Icon = tab.icon;
+      {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {message && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
+
+      <div className="flex gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1">
+        {(Object.keys(SECTION_META) as SectionId[]).map((section) => {
+          const Icon = SECTION_META[section].icon;
           return (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSearch(''); }} className={`flex-1 min-w-max flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-xs transition-all ${activeTab === tab.id ? 'bg-white shadow-md text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>
-              <Icon size={14} /> {tab.label}
+            <button
+              key={section}
+              type="button"
+              onClick={() => {
+                setActiveSection(section);
+                setSearch('');
+                setSelectedTransactionIds([]);
+                setSelectedDepotIds([]);
+              }}
+              className={`flex min-w-max items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${activeSection === section ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <Icon size={16} /> {SECTION_META[section].label}
             </button>
           );
         })}
       </div>
 
-      {/* ============= DASHBOARD ============= */}
-      {activeTab === 'dashboard' && (
+      {activeSection === 'dashboard' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Chiffre d'affaires", val: ca, icon: TrendingUp, color: 'bg-emerald-500', sub: 'Total ventes' },
-              { label: 'Total Achats', val: achats, icon: ShoppingCart, color: 'bg-blue-500', sub: 'Coûts cumulés' },
-              { label: 'Total Dépenses', val: depenses, icon: Receipt, color: 'bg-red-500', sub: 'Dépenses cumulées' },
-              { label: 'Bénéfice estimé', val: benefice, icon: Wallet, color: benefice >= 0 ? 'bg-indigo-500' : 'bg-rose-500', sub: 'CA - Achats - Dépenses' },
-            ].map(kpi => { const Icon = kpi.icon; return (
-              <div key={kpi.label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <p className="text-sm text-slate-500 font-medium">{kpi.label}</p>
-                  <div className={`w-9 h-9 ${kpi.color} rounded-xl flex items-center justify-center text-white shrink-0`}><Icon size={18} /></div>
-                </div>
-                <p className={`text-xl font-black ${kpi.val < 0 ? 'text-red-600' : 'text-slate-800'}`}>{fmt(kpi.val)}</p>
-                <p className="text-xs text-slate-400 mt-1">{kpi.sub}</p>
-              </div>
-            );})}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {dettes > 0 && <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3"><CreditCard size={20} className="text-amber-600 shrink-0"/><div><p className="text-xs font-bold text-amber-700">Dettes en cours</p><p className="text-lg font-black text-amber-900">{fmt(dettes)}</p></div></div>}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3"><ArrowDownCircle size={20} className="text-emerald-600 shrink-0"/><div><p className="text-xs font-bold text-emerald-700">Total Dépôts</p><p className="text-lg font-black text-emerald-900">{fmt(totalDepots)}</p></div></div>
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center gap-3"><ArrowUpCircle size={20} className="text-rose-600 shrink-0"/><div><p className="text-xs font-bold text-rose-700">Total Retraits</p><p className="text-lg font-black text-rose-900">{fmt(totalRetraits)}</p></div></div>
-          </div>
-
-          {/* Soldes des comptes */}
-          {comptes.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {comptes.map(c => (
-                <div key={c._id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: c.couleur || '#6366f1' }}><Landmark size={18}/></div>
-                  <div><p className="text-xs text-slate-500 font-bold">{c.nom}</p><p className="font-black text-slate-800">{fmt(c.solde)}</p></div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Bar chart */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <h2 className="font-bold text-slate-800 mb-6">Évolution mensuelle (6 mois)</h2>
-            <div className="flex items-end gap-3 h-40">
-              {monthlyData.map(m => (
-                <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="flex items-end gap-0.5 w-full h-32">
-                    <div className="flex-1 bg-blue-200 rounded-t" style={{ height: `${(m.ACHAT / maxVal) * 100}%` }} />
-                    <div className="flex-1 bg-emerald-300 rounded-t" style={{ height: `${(m.VENTE / maxVal) * 100}%` }} />
-                    <div className="flex-1 bg-red-200 rounded-t" style={{ height: `${(m.DEPENSE / maxVal) * 100}%` }} />
+              { label: "Chiffre d'affaires", value: summary.totals.ventes, icon: TrendingUp, color: 'bg-emerald-500', info: 'Basé sur les ventes enregistrées' },
+              { label: 'Total Achats', value: summary.totals.achats, icon: ShoppingCart, color: 'bg-blue-500', info: 'Coûts cumulés' },
+              { label: 'Bénéfice estimé', value: summary.totals.benefice, icon: Wallet, color: 'bg-indigo-500', info: `(${formatNumber(summary.totals.avgUnitVente)} - ${formatNumber(summary.totals.avgUnitAchat)}) × ${summary.totals.totalQtyVentes}` },
+              { label: 'Total Dépenses', value: summary.totals.depenses, icon: Receipt, color: 'bg-rose-500', info: 'Dépenses cumulées' },
+            ].map((card) => {
+              const Icon = card.icon;
+              return (
+                <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-slate-500">{card.label}</div>
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.color} text-white`}><Icon size={18} /></div>
                   </div>
-                  <span className="text-xs text-slate-400 font-medium">{m.month}</span>
+                  <div className="mt-4 text-2xl font-black text-slate-800">{formatCurrencyFCFA(card.value)}</div>
+                  <div className="mt-2 text-xs text-slate-400">{card.info}</div>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-amber-700">Dettes</div>
+              <div className="mt-2 text-2xl font-black text-amber-900">{formatCurrencyFCFA(summary.totals.dettes)}</div>
             </div>
-            <div className="flex gap-4 mt-4 text-xs font-semibold text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-200 rounded-sm block"/>Achats</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-300 rounded-sm block"/>Ventes</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-red-200 rounded-sm block"/>Dépenses</span>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Dépôts</div>
+              <div className="mt-2 text-2xl font-black text-emerald-900">{formatCurrencyFCFA(summary.totals.depots)}</div>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-rose-700">Retraits</div>
+              <div className="mt-2 text-2xl font-black text-rose-900">{formatCurrencyFCFA(summary.totals.retraits)}</div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-6 text-lg font-bold text-slate-800">Évolution Mensuelle (Achats, Dépenses vs Ventes, Dettes)</h2>
+            <div className="flex h-64 items-end gap-3 overflow-x-auto">
+              {summary.monthly.map((item) => {
+                const values = [item.ACHAT, item.VENTE, item.DEPENSE, item.DETTE];
+                const max = Math.max(...summary.monthly.flatMap((entry) => [entry.ACHAT, entry.VENTE, entry.DEPENSE, entry.DETTE]), 1);
+                return (
+                  <div key={item.month} className="flex min-w-[90px] flex-1 flex-col items-center gap-2">
+                    <div className="flex h-48 w-full items-end gap-1">
+                      <div className="w-full rounded-t bg-blue-500/80" style={{ height: `${(values[0] / max) * 100}%` }} />
+                      <div className="w-full rounded-t bg-rose-400/80" style={{ height: `${(values[2] / max) * 100}%` }} />
+                      <div className="w-full rounded-t bg-amber-400/90" style={{ height: `${(values[1] / max) * 100}%` }} />
+                      <div className="w-full rounded-t bg-violet-500/80" style={{ height: `${(values[3] / max) * 100}%` }} />
+                    </div>
+                    <div className="text-xs font-semibold text-slate-500">{item.month}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-4 text-xs font-semibold text-slate-500">
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-blue-500/80" /> Achats</span>
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-rose-400/80" /> Dépenses</span>
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-amber-400/90" /> Ventes</span>
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-violet-500/80" /> Dettes</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* ============= TRANSACTIONS (Achats, Ventes, Dépenses, Dettes) ============= */}
-      {['ACHAT','VENTE','DEPENSE','DETTE'].includes(activeTab) && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+      {currentSectionType && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="font-bold text-slate-800">{TYPE_CONFIG[activeTab as TxType].label}s</h2>
-              <span className="text-xs text-slate-400 font-bold">{filtered.length} — {fmt(filtered.reduce((a, t) => a + t.montant, 0))}</span>
+              <div className="text-lg font-semibold text-slate-800">{SECTION_META[activeSection].label}</div>
+              <span className="text-xs text-slate-400">{filteredTransactions.length} élément(s)</span>
             </div>
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
-              <Search size={14} className="text-slate-400" />
-              <input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="outline-none text-sm w-40" />
-            </div>
-          </div>
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide border-b border-slate-100">
-              <tr>
-                <th className="px-5 py-3">Date</th>
-                <th className="px-3 py-3">Description</th>
-                <th className="px-3 py-3">{TYPE_CONFIG[activeTab as TxType].tiersLabel}</th>
-                <th className="px-3 py-3">Compte</th>
-                <th className="px-3 py-3 text-right">Montant</th>
-                <th className="px-3 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? <tr><td colSpan={6} className="py-10 text-center text-slate-400">Chargement...</td></tr>
-              : filtered.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-400">Aucune entrée.</td></tr>
-              : filtered.map(t => (
-                <tr key={t._id} className="hover:bg-slate-50 group transition">
-                  <td className="px-5 py-3 text-slate-500">{new Date(t.date).toLocaleDateString('fr-FR')}</td>
-                  <td className="px-3 py-3 font-semibold text-slate-800">{t.description}</td>
-                  <td className="px-3 py-3 text-slate-500">{t.tiers || '—'}</td>
-                  <td className="px-3 py-3 text-slate-500">{t.compte || '—'}</td>
-                  <td className="px-3 py-3 text-right font-bold text-slate-800">{fmt(t.montant)}</td>
-                  <td className="px-3 py-3 text-right"><button onClick={() => deleteTx(t._id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition"><Trash2 size={14}/></button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ============= DÉPÔTS / RETRAITS ============= */}
-      {activeTab === 'DEPOT' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center gap-4"><ArrowDownCircle size={28} className="text-emerald-600"/><div><p className="text-sm text-emerald-700 font-bold">Total Dépôts</p><p className="text-2xl font-black text-emerald-900">{fmt(totalDepots)}</p></div></div>
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 flex items-center gap-4"><ArrowUpCircle size={28} className="text-rose-600"/><div><p className="text-sm text-rose-700 font-bold">Total Retraits</p><p className="text-2xl font-black text-rose-900">{fmt(totalRetraits)}</p></div></div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between bg-slate-50 items-center">
-              <h2 className="font-bold text-slate-800">Opérations ({filteredDepots.length})</h2>
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
-                <Search size={14} className="text-slate-400"/>
-                <input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="outline-none text-sm w-36"/>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <Search size={14} className="text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-52 bg-transparent text-sm outline-none" />
               </div>
+              <button onClick={deleteSelectedTransactions} disabled={selectedTransactionIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
+              <button onClick={() => exportTransactionsPdf(currentSectionType)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
             </div>
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide border-b border-slate-100">
-                <tr><th className="px-5 py-3">Date</th><th className="px-3 py-3">Type</th><th className="px-3 py-3">Opérateur</th><th className="px-3 py-3">Description</th><th className="px-3 py-3 text-right">Montant</th><th className="px-3 py-3"></th></tr>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3"><CheckSquare size={14} /></th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Article / Description</th>
+                  <th className="px-4 py-3">Qté</th>
+                  <th className="px-4 py-3">Prix unitaire</th>
+                  <th className="px-4 py-3">Débit</th>
+                  <th className="px-4 py-3">Crédit</th>
+                  <th className="px-4 py-3">{TX_TYPE_CONFIG[currentSectionType].partyLabel}</th>
+                  <th className="px-4 py-3 text-right">Total (FCFA)</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredDepots.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-400">Aucune opération enregistrée.</td></tr>
-                : filteredDepots.map(d => (
-                  <tr key={d._id} className="hover:bg-slate-50 group transition">
-                    <td className="px-5 py-3 text-slate-500">{new Date(d.date).toLocaleDateString('fr-FR')}</td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-flex items-center gap-1 text-xs font-black uppercase px-2 py-0.5 rounded border ${d.type === 'DEPOT' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                        {d.type === 'DEPOT' ? <ArrowDownCircle size={12}/> : <ArrowUpCircle size={12}/>}
-                        {d.type}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 font-medium text-slate-700">{d.operateur}</td>
-                    <td className="px-3 py-3 text-slate-500">{d.description || '—'}</td>
-                    <td className="px-3 py-3 text-right font-bold text-slate-800">{fmt(d.montant)}</td>
-                    <td className="px-3 py-3 text-right"><button onClick={() => deleteDepot(d._id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition"><Trash2 size={14}/></button></td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Chargement...</td></tr>
+                ) : filteredTransactions.length === 0 ? (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune ligne trouvée.</td></tr>
+                ) : filteredTransactions.map((item, index) => {
+                  const debit = accountById(getAccountId(item.accountDebitId));
+                  const credit = accountById(getAccountId(item.accountCreditId));
+                  const selected = selectedTransactionIds.includes(item._id);
+                  return (
+                    <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={(e) => setSelectedTransactionIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
+                      <td className="px-4 py-3 whitespace-nowrap">{normalizeDate(item.date)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
+                      <td className="px-4 py-3">{item.quantite || 0}</td>
+                      <td className="px-4 py-3">{formatNumber(item.prixUnitaire || 0)} {item.txCurrency || 'FCFA'}</td>
+                      <td className="px-4 py-3">{debit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{credit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{item.tiers || '—'}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.amountFCFA || 0)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => openEditTransactionModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                          <button onClick={() => deleteTransaction(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
+              <tfoot>
+                <tr className="bg-blue-50/70">
+                  <td colSpan={8} className="px-4 py-3 text-right font-semibold">Total</td>
+                  <td className="px-4 py-3 text-right font-black">{formatCurrencyFCFA(filteredTransactions.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
       )}
 
-      {/* ============= GESTION DE COMPTES ============= */}
-      {activeTab === 'COMPTES' && (
+      {activeSection === 'depots' && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-lg font-semibold text-slate-800">Dépôts / Retraits</div>
+              <span className="text-xs text-slate-400">{filteredDepots.length} opération(s)</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <Search size={14} className="text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-52 bg-transparent text-sm outline-none" />
+              </div>
+              <button onClick={deleteSelectedDepots} disabled={selectedDepotIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
+              <button onClick={exportDepotsPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
+            </div>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3"><CheckSquare size={14} /></th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Qté</th>
+                  <th className="px-4 py-3">Montant</th>
+                  <th className="px-4 py-3">Débit</th>
+                  <th className="px-4 py-3">Crédit</th>
+                  <th className="px-4 py-3">Opérateur</th>
+                  <th className="px-4 py-3 text-right">Total (FCFA)</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Chargement...</td></tr>
+                ) : filteredDepots.length === 0 ? (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune opération trouvée.</td></tr>
+                ) : filteredDepots.map((item, index) => {
+                  const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+                  const credit = accountById(getAccountId(item.compteCreditId));
+                  const selected = selectedDepotIds.includes(item._id);
+                  return (
+                    <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={(e) => setSelectedDepotIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
+                      <td className="px-4 py-3 whitespace-nowrap">{normalizeDate(item.date)}</td>
+                      <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${item.type === 'DEPOT' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.type}</span></td>
+                      <td className="px-4 py-3">{item.quantite || 1}</td>
+                      <td className="px-4 py-3">{formatCurrencyFCFA(item.montantUnitaire || 0)}</td>
+                      <td className="px-4 py-3">{debit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{credit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{item.operateur}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.montant || 0)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => openEditDepotModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                          <button onClick={() => deleteDepot(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-blue-50/70">
+                  <td colSpan={8} className="px-4 py-3 text-right font-semibold">Total</td>
+                  <td className="px-4 py-3 text-right font-black">{formatCurrencyFCFA(filteredDepots.reduce((sum, item) => sum + Number(item.montant || 0), 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'comptes' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {comptes.map(c => (
-              <div key={c._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 group relative">
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0" style={{ background: c.couleur || '#6366f1' }}><Landmark size={22}/></div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-slate-800">{c.nom}</h3>
-                    <p className="text-xs text-slate-500">{c.type}</p>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                    <button onClick={() => { setCompteForm({ nom: c.nom, type: c.type, solde: c.solde, description: c.description || '', editId: c._id }); setShowCompteModal(true); }} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit3 size={14}/></button>
-                    <button onClick={() => deleteCompte(c._id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
-                  </div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div>
+                  <div className="text-2xl font-bold text-slate-800">Gestion des comptes (libellés)</div>
                 </div>
-                {c.description && <p className="text-xs text-slate-400 mb-3">{c.description}</p>}
-                <div className="border-t border-slate-100 pt-3">
-                  <p className="text-xs text-slate-500 mb-0.5">Solde actuel</p>
-                  <p className={`text-2xl font-black ${c.solde < 0 ? 'text-red-600' : 'text-slate-800'}`}>{fmt(c.solde)}</p>
-                </div>
+                <div className="text-sm text-slate-400">{displayAccounts.length} libellé(s)</div>
               </div>
-            ))}
+              <div className="flex flex-wrap gap-2">
+                {displayAccounts.length === 0 && <button onClick={initializeDefaultAccounts} disabled={saving} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Créer comptes de base</button>}
+                <button onClick={openNewCompteModal} className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md">+ Nouveau libellé</button>
+                <button onClick={resetAllComptes} disabled={displayAccounts.length === 0 || saving} className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50">Réinitialiser tous à 0</button>
+                <button onClick={exportComptesPdf} disabled={displayAccounts.length === 0} className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50">Exporter PDF Comptes</button>
+              </div>
+            </div>
 
-            <button onClick={() => { setCompteForm({ ...EMPTY_COMPTE, editId: '' }); setShowCompteModal(true); }} className="bg-white rounded-2xl border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 transition flex flex-col items-center justify-center min-h-[160px] text-slate-400 hover:text-indigo-600">
-              <Plus size={28} className="mb-2"/><span className="font-bold text-sm">Ajouter un compte</span>
-            </button>
+            <div className="mt-6 overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Libellé</th>
+                    <th className="px-4 py-3">Devise</th>
+                    <th className="px-4 py-3">Taux (1 unité → FCFA)</th>
+                    <th className="px-4 py-3 text-right">Solde (FCFA)</th>
+                    <th className="px-4 py-3 text-right">Equiv. (unités)</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayAccounts.map((account, index) => (
+                    <tr key={account._id} className={`border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                      <td className="px-4 py-4 text-[16px] font-medium text-slate-800">{account.nom}</td>
+                      <td className="px-4 py-4">{account.devise}</td>
+                      <td className="px-4 py-4">{formatNumber(account.tauxFCFA || 1)}</td>
+                      <td className="px-4 py-4 text-right text-[16px] font-black text-slate-800">{formatCurrencyFCFA(account.soldeCalculeFCFA || 0)}</td>
+                      <td className="px-4 py-4 text-right">{formatNumber(account.equivalentUnits || 0)} {account.devise}</td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex justify-end gap-3">
+                          <button onClick={() => openEditCompteModal(account)} className="text-blue-600 hover:text-blue-700"><Edit3 size={16} /></button>
+                          <button onClick={() => resetOneCompte(account)} className="text-amber-500 hover:text-amber-600">0</button>
+                          <button onClick={() => deleteCompte(account._id)} className="text-rose-400 hover:text-rose-600"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-blue-50/70 font-semibold text-slate-800">
+                    <td colSpan={3} className="px-4 py-4 text-right">Total Disponible</td>
+                    <td className="px-4 py-4 text-right text-xl font-black">{formatCurrencyFCFA(summary.totals.totalDisponible)}</td>
+                    <td />
+                    <td />
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className="px-4 py-3 text-xs text-slate-500">
+                      <strong>Formule :</strong> TotalComptes + Bénéfice - Dépenses - Dettes
+                      <br />
+                      Bénéfice = ({formatNumber(summary.totals.avgUnitVente)} - {formatNumber(summary.totals.avgUnitAchat)}) × {summary.totals.totalQtyVentes} = {formatCurrencyFCFA(summary.totals.benefice)}
+                      {' | '}Dépenses: {formatCurrencyFCFA(summary.totals.depenses)}
+                      {' | '}Dettes: {formatCurrencyFCFA(summary.totals.dettes)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ============= MODAL TRANSACTION ============= */}
       {showTxModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50 shrink-0">
-              <h2 className="font-bold text-slate-800">Nouvelle Transaction</h2>
-              <button onClick={() => setShowTxModal(false)}><X size={20} className="text-slate-400"/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-800">{txForm.editId ? 'Modifier la transaction' : `Nouvelle ${TX_TYPE_CONFIG[txForm.type].label.toLowerCase()}`}</h2>
+              <button onClick={() => setShowTxModal(false)}><X size={20} className="text-slate-400" /></button>
             </div>
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+            <form onSubmit={saveTransaction} className="space-y-4 overflow-y-auto p-6">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Type *</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(['ACHAT','VENTE','DEPENSE','DETTE'] as TxType[]).map(t => (
-                    <button key={t} onClick={() => setTxForm(f => ({ ...f, type: t }))} className={`py-2 rounded-xl text-xs font-bold border transition ${txForm.type === t ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{TYPE_CONFIG[t].label}</button>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">Type *</label>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  {(Object.keys(TX_TYPE_CONFIG) as AccountingTransactionType[]).map((type) => (
+                    <button key={type} type="button" onClick={() => setTxForm((prev) => ({ ...prev, type, txCurrency: TX_TYPE_CONFIG[type].defaultCurrency }))} className={`rounded-xl border px-3 py-2 text-xs font-bold ${txForm.type === type ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>{TX_TYPE_CONFIG[type].label}</button>
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Date *</label><input type="date" value={txForm.date} onChange={e => setTxForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Compte</label>
-                  <select value={txForm.compte} onChange={e => setTxForm(f => ({ ...f, compte: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm">
-                    <option value="">—</option>
-                    {comptes.map(c => <option key={c._id} value={c.nom}>{c.nom}</option>)}
-                    <option>Caisse</option><option>Banque</option><option>Mobile Money</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Date *</label><input type="date" required value={txForm.date} onChange={(e) => setTxForm((prev) => ({ ...prev, date: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Devise *</label><select value={txForm.txCurrency} onChange={(e) => setTxForm((prev) => ({ ...prev, txCurrency: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="FCFA">FCFA</option><option value="USD">USD</option><option value="EUR">EUR</option></select></div>
               </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Description *</label><input type="text" value={txForm.description} onChange={e => setTxForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder="Ex: Achat fournitures..."/></div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">{TYPE_CONFIG[txForm.type].tiersLabel}</label><input type="text" value={txForm.tiers} onChange={e => setTxForm(f => ({ ...f, tiers: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-              <div className="grid grid-cols-3 gap-3">
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Qté</label><input type="number" value={txForm.quantite} onChange={e => setTxForm(f => ({ ...f, quantite: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">P.U.</label><input type="number" value={txForm.prixUnitaire} onChange={e => setTxForm(f => ({ ...f, prixUnitaire: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Montant *</label><input type="number" value={txForm.montant} onChange={e => setTxForm(f => ({ ...f, montant: e.target.value }))} placeholder={txForm.quantite && txForm.prixUnitaire ? String(parseFloat(txForm.quantite||'0') * parseFloat(txForm.prixUnitaire||'0')) : ''} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Article / Description *</label><input type="text" required value={txForm.description} onChange={(e) => setTxForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Quantité</label><input type="number" min="0" value={txForm.quantite} onChange={(e) => setTxForm((prev) => ({ ...prev, quantite: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Prix unitaire</label><input type="number" min="0" value={txForm.prixUnitaire} onChange={(e) => setTxForm((prev) => ({ ...prev, prixUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant total</label><input type="number" min="0" value={txForm.montant} onChange={(e) => setTxForm((prev) => ({ ...prev, montant: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               </div>
-            </div>
-            <div className="p-5 border-t flex gap-3 bg-slate-50 shrink-0">
-              <button onClick={() => setShowTxModal(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600">Annuler</button>
-              <button onClick={saveTx} disabled={!txForm.description || saving} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit *</label><select value={txForm.accountDebitId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit *</label><select value={txForm.accountCreditId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+              </div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">{TX_TYPE_CONFIG[txForm.type].partyLabel}</label><input type="text" value={txForm.tiers} onChange={(e) => setTxForm((prev) => ({ ...prev, tiers: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={txForm.notes} onChange={(e) => setTxForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowTxModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-600">Annuler</button>
+                <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white disabled:opacity-60">{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ============= MODAL DÉPÔT/RETRAIT ============= */}
       {showDepotModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50 shrink-0">
-              <h2 className="font-bold text-slate-800">Nouveau Dépôt / Retrait</h2>
-              <button onClick={() => setShowDepotModal(false)}><X size={20} className="text-slate-400"/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-800">{depotForm.editId ? 'Modifier le dépôt/retrait' : 'Nouveau dépôt / retrait'}</h2>
+              <button onClick={() => setShowDepotModal(false)}><X size={20} className="text-slate-400" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Opération *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['DEPOT','RETRAIT'] as const).map(t => (
-                    <button key={t} onClick={() => setDepotForm(f => ({ ...f, type: t }))} className={`py-2.5 rounded-xl text-sm font-bold border transition ${depotForm.type === t ? (t === 'DEPOT' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-200 text-slate-500'}`}>
-                      {t === 'DEPOT' ? '⬇ Dépôt' : '⬆ Retrait'}
-                    </button>
-                  ))}
-                </div>
+            <form onSubmit={saveDepot} className="space-y-4 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Type</label><select value={depotForm.type} onChange={(e) => setDepotForm((prev) => ({ ...prev, type: e.target.value as 'DEPOT' | 'RETRAIT' }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="DEPOT">DEPOT</option><option value="RETRAIT">RETRAIT</option></select></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Date</label><input type="date" value={depotForm.date} onChange={(e) => setDepotForm((prev) => ({ ...prev, date: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Date *</label><input type="date" value={depotForm.date} onChange={e => setDepotForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Montant (FCFA) *</label><input type="number" value={depotForm.montant} onChange={e => setDepotForm(f => ({ ...f, montant: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Quantité</label><input type="number" min="1" value={depotForm.quantite} onChange={(e) => setDepotForm((prev) => ({ ...prev, quantite: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant unitaire (FCFA)</label><input type="number" min="0" value={depotForm.montantUnitaire} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Opérateur *</label>
-                <select value={depotForm.operateur} onChange={e => setDepotForm(f => ({ ...f, operateur: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm">
-                  {OPERATEURS.map(op => <option key={op}>{op}</option>)}
-                </select>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
               </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Description</label><input type="text" value={depotForm.description} onChange={e => setDepotForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder="Ex: Virement client Dupont..."/></div>
-            </div>
-            <div className="p-5 border-t flex gap-3 bg-slate-50 shrink-0">
-              <button onClick={() => setShowDepotModal(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600">Annuler</button>
-              <button onClick={saveDepot} disabled={!depotForm.montant || saving} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label><input type="text" value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              </div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={depotForm.notes} onChange={(e) => setDepotForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowDepotModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-600">Annuler</button>
+                <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white disabled:opacity-60">{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ============= MODAL COMPTE ============= */}
       {showCompteModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
-              <h2 className="font-bold text-slate-800">{compteForm.editId ? 'Modifier le compte' : 'Nouveau Compte'}</h2>
-              <button onClick={() => setShowCompteModal(false)}><X size={20} className="text-slate-400"/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-800">{compteForm.editId ? 'Modifier le libellé' : 'Nouveau libellé'}</h2>
+              <button onClick={() => setShowCompteModal(false)}><X size={20} className="text-slate-400" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Nom du compte *</label><input type="text" value={compteForm.nom} onChange={e => setCompteForm(f => ({ ...f, nom: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder="Ex: Caisse principale, Compte BNI..."/></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Type</label>
-                  <select value={compteForm.type} onChange={e => setCompteForm(f => ({ ...f, type: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm">
-                    {COMPTE_TYPES.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Solde initial (FCFA)</label><input type="number" value={compteForm.solde} onChange={e => setCompteForm(f => ({ ...f, solde: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
+            <form onSubmit={saveCompte} className="space-y-4 overflow-y-auto p-6">
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Libellé</label><input required type="text" value={compteForm.nom} onChange={(e) => setCompteForm((prev) => ({ ...prev, nom: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Devise</label><select value={compteForm.devise} onChange={(e) => setCompteForm((prev) => ({ ...prev, devise: e.target.value, tauxFCFA: e.target.value === 'FCFA' ? '1' : prev.tauxFCFA || String(DEFAULT_USD_RATE) }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="FCFA">FCFA</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="AUTRE">AUTRE</option></select></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Type</label><select value={compteForm.type} onChange={(e) => setCompteForm((prev) => ({ ...prev, type: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option>Espèces</option><option>Banque</option><option>Mobile Money</option><option>Chèque</option><option>Autre</option></select></div>
               </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Description</label><input type="text" value={compteForm.description} onChange={e => setCompteForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm"/></div>
-            </div>
-            <div className="p-5 border-t flex gap-3 bg-slate-50">
-              <button onClick={() => setShowCompteModal(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600">Annuler</button>
-              <button onClick={saveCompte} disabled={!compteForm.nom || saving} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Enregistrement...' : compteForm.editId ? 'Mettre à jour' : 'Créer'}</button>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Taux (1 unité → FCFA)</label><input required type="number" min="0" value={compteForm.tauxFCFA} onChange={(e) => setCompteForm((prev) => ({ ...prev, tauxFCFA: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Solde initial (unités)</label><input type="number" value={compteForm.soldeInitialUnites} onChange={(e) => setCompteForm((prev) => ({ ...prev, soldeInitialUnites: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              </div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><textarea rows={3} value={compteForm.description} onChange={(e) => setCompteForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowCompteModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-600">Annuler</button>
+                <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white disabled:opacity-60">{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

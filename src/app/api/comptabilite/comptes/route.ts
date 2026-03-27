@@ -16,7 +16,25 @@ export async function POST(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
-    const compte = await Compte.create(body);
+
+    const devise = String(body?.devise || 'FCFA').toUpperCase();
+    const fallbackRate = devise === 'FCFA' ? 1 : 590;
+    const tauxFCFA = Number(body?.tauxFCFA ?? body?.taux ?? fallbackRate);
+    const soldeInitialUnites = Number(body?.soldeInitialUnites ?? body?.soldeInitial ?? body?.solde ?? 0);
+
+    const compte = await Compte.create({
+      nom: String(body?.nom || '').trim(),
+      type: String(body?.type || 'Autre').trim(),
+      devise,
+      tauxFCFA,
+      soldeInitialUnites,
+      solde: devise === 'FCFA' ? soldeInitialUnites : soldeInitialUnites * tauxFCFA,
+      description: String(body?.description || '').trim() || undefined,
+      couleur: String(body?.couleur || '#2563eb'),
+      ordre: Number(body?.ordre || 0),
+      actif: body?.actif !== false,
+    });
+
     return NextResponse.json({ success: true, data: compte }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });

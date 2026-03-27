@@ -16,7 +16,23 @@ export async function POST(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
-    const op = await DepotRetrait.create(body);
+    const quantite = Number(body?.quantite || 1);
+    const montantUnitaire = Number(body?.montantUnitaire ?? body?.montant ?? 0);
+    const montant = Number(body?.montant ?? (quantite * montantUnitaire));
+
+    const op = await DepotRetrait.create({
+      type: String(body?.type || 'DEPOT').toUpperCase(),
+      date: body?.date,
+      montant,
+      quantite,
+      montantUnitaire,
+      operateur: String(body?.operateur || '').trim(),
+      compteId: body?.compteId || undefined,
+      compteDebitId: body?.compteDebitId || undefined,
+      compteCreditId: body?.compteCreditId || undefined,
+      description: String(body?.description || '').trim() || undefined,
+      notes: String(body?.notes || '').trim() || undefined,
+    });
     return NextResponse.json({ success: true, data: op }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
