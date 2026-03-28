@@ -63,7 +63,7 @@ export default function KycAdminPage() {
   ];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Image Modal */}
       {imageModal && (
         <div onClick={() => setImageModal(null)} className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out">
@@ -71,7 +71,7 @@ export default function KycAdminPage() {
         </div>
       )}
 
-      <header className="flex justify-between items-center mb-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">Vérification KYC</h1>
           <p className="text-slate-500 mt-1">Validez les demandes d'identité reçues depuis les liens envoyés aux clients.</p>
@@ -98,7 +98,7 @@ export default function KycAdminPage() {
       )}
 
       {/* Onglets */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         {tabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -119,7 +119,7 @@ export default function KycAdminPage() {
       </div>
 
       {/* Liste + Détail */}
-      <div className="flex gap-6">
+      <div className="flex flex-col xl:flex-row gap-6">
         {/* Liste des demandes */}
         <div className="flex-1 space-y-3">
           {loading ? (
@@ -134,8 +134,8 @@ export default function KycAdminPage() {
               onClick={() => setSelectedReq(req)}
               className={`bg-white p-5 rounded-2xl border cursor-pointer transition-all hover:shadow-md ${selectedReq?._id === req._id ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-slate-200'}`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4 min-w-0">
                   {req.selfieUrl ? (
                     <img src={req.selfieUrl} alt="Selfie" className="w-12 h-12 rounded-full object-cover border-2 border-slate-200" />
                   ) : (
@@ -143,13 +143,13 @@ export default function KycAdminPage() {
                       {req.prenom?.[0]}{req.nom?.[0]}
                     </div>
                   )}
-                  <div>
-                    <p className="font-bold text-slate-800">{req.prenom} {req.nom}</p>
-                    <p className="text-sm text-slate-500">{req.email}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{req.prenom} {req.nom}</p>
+                    <p className="text-sm text-slate-500 truncate">{req.email}</p>
                     <p className="text-xs text-slate-400 mt-0.5">{req.dateSubmission ? new Date(req.dateSubmission).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   {req.photoIdUrl && (
                     <button onClick={e => { e.stopPropagation(); setImageModal(req.photoIdUrl); }} className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1">
                       <Eye size={14} /> Voir ID
@@ -163,7 +163,7 @@ export default function KycAdminPage() {
 
         {/* Panneau de décision */}
         {selectedReq && (
-          <div className="w-96 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-fit sticky top-4">
+          <div className="w-full xl:w-96 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 h-fit xl:sticky xl:top-4">
             <h3 className="font-bold text-slate-800 text-lg mb-4">Dossier KYC</h3>
 
             <div className="flex gap-3 mb-5">
@@ -205,8 +205,11 @@ export default function KycAdminPage() {
               className="w-full mb-6 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition-all shadow-sm"
             >
               <FileText size={18} className="text-blue-600" />
-              Télécharger Rapport PDF
+              Télécharger l'attestation KYC (PDF)
             </button>
+            <p className="text-xs text-slate-500 -mt-4 mb-5">
+              Ce PDF est un récapitulatif du dossier (identité, statut et dates), pas une copie de la pièce d'identité.
+            </p>
 
             {activeTab === 'EN_ATTENTE' && (
               <>

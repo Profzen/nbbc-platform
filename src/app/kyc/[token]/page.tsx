@@ -13,8 +13,6 @@ export default function KycPublicPage() {
   const [formData, setFormData] = useState({ nom: '', prenom: '', email: '', telephone: '' });
   const [photoId, setPhotoId] = useState<{ url: string; publicId: string } | null>(null);
   const [selfie, setSelfie] = useState<string | null>(null);
-  const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
-  const [selfieUploaded, setSelfieUploaded] = useState<{ url: string; publicId: string } | null>(null);
   const [politiqueAcceptee, setPolitiqueAcceptee] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,39 +55,14 @@ export default function KycPublicPage() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
-    canvas.toBlob(blob => {
-      setSelfieBlob(blob);
-      setSelfie(canvas.toDataURL('image/jpeg'));
-      stopCamera();
-    }, 'image/jpeg', 0.85);
-  };
-
-  // Uploader le selfie sur Cloudinary via API
-  const uploadSelfie = async () => {
-    if (!selfieBlob) return;
-    setLoading(true);
-    try {
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', selfieBlob, 'selfie.jpg');
-      formDataUpload.append('upload_preset', 'ml_default');
-
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        { method: 'POST', body: formDataUpload }
-      );
-      const data = await res.json();
-      setSelfieUploaded({ url: data.secure_url, publicId: data.public_id });
-      setStep('policy');
-    } catch {
-      setError("Erreur lors de l'envoi du selfie. Réessayez.");
-    } finally {
-      setLoading(false);
-    }
+    setSelfie(canvas.toDataURL('image/jpeg', 0.85));
+    stopCamera();
   };
 
   // Soumission finale
   const handleSubmit = async () => {
     if (!politiqueAcceptee) { setError('Vous devez accepter la politique.'); return; }
+    if (!selfie) { setError('Veuillez capturer votre selfie avant de valider.'); return; }
     setLoading(true);
     setError('');
     try {
@@ -100,8 +73,7 @@ export default function KycPublicPage() {
           ...formData,
           photoIdUrl: photoId?.url,
           photoIdPublicId: photoId?.publicId,
-          selfieUrl: selfieUploaded?.url,
-          selfiePublicId: selfieUploaded?.publicId,
+          selfieDataUrl: selfie,
           politiqueAcceptee: true,
         })
       });
@@ -155,10 +127,10 @@ export default function KycPublicPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center p-3 sm:p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-white text-center">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 sm:p-8 text-white text-center">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
             <ShieldCheck size={32} />
           </div>
@@ -180,7 +152,7 @@ export default function KycPublicPage() {
           })}
         </div>
 
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           {error && (
             <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-600 text-sm px-4 py-3 rounded-xl">
               {error}
@@ -190,7 +162,7 @@ export default function KycPublicPage() {
           {/* ÉTAPE 1 : Informations */}
           {step === 'form' && (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Prénom *</label>
                   <input type="text" required value={formData.prenom} onChange={e => setFormData({...formData, prenom: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm" placeholder="Jean" />
@@ -253,10 +225,10 @@ export default function KycPublicPage() {
               {selfie ? (
                 <div className="space-y-4">
                   <img src={selfie} alt="Selfie" className="w-full rounded-2xl border-4 border-emerald-300" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => { setSelfie(null); setSelfieBlob(null); startCamera(); }} className="py-2.5 rounded-xl border border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-50">Reprendre</button>
-                    <button onClick={uploadSelfie} disabled={loading} className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
-                      {loading ? <Loader2 size={18} className="animate-spin" /> : 'Valider ce selfie'}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button onClick={() => { setSelfie(null); startCamera(); }} className="py-2.5 rounded-xl border border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-50">Reprendre</button>
+                    <button onClick={() => { setError(''); setStep('policy'); }} className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
+                      Continuer avec ce selfie
                     </button>
                   </div>
                 </div>

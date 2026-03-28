@@ -3,6 +3,7 @@ import dbConnect from '@/lib/mongodb';
 import KycRequest from '@/models/KycRequest';
 import Client from '@/models/Client';
 import { v2 as cloudinary } from 'cloudinary';
+import { sendKycDecisionClientEmail } from '@/lib/kyc-email';
 
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
@@ -30,6 +31,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   kycRequest.notesAdmin = notesAdmin || '';
   kycRequest.dateValidation = new Date();
   await kycRequest.save();
+
+  if (kycRequest.email) {
+    await sendKycDecisionClientEmail(
+      {
+        prenom: kycRequest.prenom || '',
+        nom: kycRequest.nom || '',
+        email: kycRequest.email,
+      },
+      statutKyc,
+      notesAdmin
+    );
+  }
 
   // Si validé et lié à un client → mettre à jour le statut KYC du client
   if (statutKyc === 'VALIDE' && kycRequest.clientId) {

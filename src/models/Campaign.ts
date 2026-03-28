@@ -1,10 +1,21 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
+
+// Comment cibler les destinataires
+export type CibleType = 'TOUS' | 'TYPE_CLIENT' | 'GROUPES' | 'SELECTIONNES';
+// Channel d'envoi (SMS pour usage futur)
+export type Canal = 'EMAIL' | 'SMS';
 
 export interface ICampaign extends Document {
   titre: string;
-  sujet: string;         // Objet de l'email
-  contenu: string;       // Corps HTML de l'email
+  sujet: string;
+  contenu: string;
+  canal: Canal;
+  // Ancienne cible (type de client) — conservée pour compatibilité
   cible: 'TOUS' | 'PARTICULIER' | 'ENTREPRISE' | 'INVESTISSEUR' | 'PARTENAIRE';
+  // Nouveau mode de ciblage
+  cibleType: CibleType;
+  groupeIds: Types.ObjectId[];        // si cibleType = GROUPES
+  destinataireIds: Types.ObjectId[];  // si cibleType = SELECTIONNES
   statut: 'BROUILLON' | 'ENVOYE' | 'ECHEC';
   nombreDestinataires: number;
   nombreEnvoyes: number;
@@ -19,11 +30,19 @@ const CampaignSchema: Schema = new Schema(
     titre: { type: String, required: true },
     sujet: { type: String, required: true },
     contenu: { type: String, required: true },
+    canal: { type: String, enum: ['EMAIL', 'SMS'], default: 'EMAIL' },
     cible: {
       type: String,
       enum: ['TOUS', 'PARTICULIER', 'ENTREPRISE', 'INVESTISSEUR', 'PARTENAIRE'],
       default: 'TOUS'
     },
+    cibleType: {
+      type: String,
+      enum: ['TOUS', 'TYPE_CLIENT', 'GROUPES', 'SELECTIONNES'],
+      default: 'TOUS'
+    },
+    groupeIds: [{ type: Schema.Types.ObjectId, ref: 'GroupeClient' }],
+    destinataireIds: [{ type: Schema.Types.ObjectId, ref: 'Client' }],
     statut: {
       type: String,
       enum: ['BROUILLON', 'ENVOYE', 'ECHEC'],

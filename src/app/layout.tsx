@@ -31,7 +31,7 @@ export default async function RootLayout({
 
   return (
     <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 flex h-screen overflow-hidden`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden`}>
         <AuthProvider>
           {isPublicPage ? (
             <main className="flex-1 overflow-y-auto h-full">

@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Campaign from '@/models/Campaign';
 import Client from '@/models/Client';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'NBBC Platform <noreply@nbbc.com>';
+import GroupeClient from '@/models/GroupeClient';
+import { sendMail } from '@/lib/mailer';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -17,9 +15,31 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ success: false, error: 'Campagne déjà envoyée.' }, { status: 400 });
   }
 
-  // Récupérer les destinataires selon la cible
-  const filter = campaign.cible === 'TOUS' ? {} : { typeClient: campaign.cible };
-  const clients = await Client.find(filter).select('email nom prenom');
+  // --- Résolution des destinataires selon le mode de ciblage ---
+  let clients: { email: string; nom: string; prenom: string }[] = [];
+
+  const cibleType = campaign.cibleType || 'TOUS';
+
+  if (cibleType === 'SELECTIONNES' && campaign.destinataireIds?.length) {
+    clients = await Client.find({ _id: { $in: campaign.destinataireIds } }).select('email nom prenom');
+  } else if (cibleType === 'GROUPES' && campaign.groupeIds?.length) {
+    const groupes = await GroupeClient.find({ _id: { $in: campaign.groupeIds } }).populate('clientIds', 'email nom prenom');
+    const seen = new Set<string>();
+    for (const g of groupes) {
+      for (const c of (g as any).clientIds) {
+        if (!seen.has(String(c._id))) {
+          seen.add(String(c._id));
+          clients.push({ email: c.email, nom: c.nom, prenom: c.prenom });
+        }
+      }
+    }
+  } else if (cibleType === 'TYPE_CLIENT') {
+    const filter = campaign.cible === 'TOUS' ? {} : { typeClient: campaign.cible };
+    clients = await Client.find(filter).select('email nom prenom');
+  } else {
+    // TOUS
+    clients = await Client.find({}).select('email nom prenom');
+  }
 
   if (clients.length === 0) {
     return NextResponse.json({ success: false, error: 'Aucun destinataire dans cette cible.' }, { status: 400 });
@@ -29,28 +49,31 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   let envoyes = 0;
   let echecs = 0;
 
-  // Envoi par batch de 10 pour respecter les limites de rate
-  for (let i = 0; i < clients.length; i += 10) {
-    const batch = clients.slice(i, i + 10);
-    
-    await Promise.allSettled(batch.map(async (client) => {
-      try {
-        const personalizedHtml = campaign.contenu
-          .replace(/\{\{nom\}\}/g, client.nom)
-          .replace(/\{\{prenom\}\}/g, client.prenom)
-          .replace(/\{\{email\}\}/g, client.email);
+  // Envoi séquentiel par batch de 5 pour ne pas saturer le serveur SMTP
+  const BATCH = 5;
+  for (let i = 0; i < clients.length; i += BATCH) {
+    const batch = clients.slice(i, i + BATCH);
 
-        await resend.emails.send({
-          from: FROM_EMAIL,
-          to: client.email,
-          subject: campaign.sujet,
-          html: wrapTemplate(personalizedHtml, campaign.sujet, client.prenom),
-        });
-        envoyes++;
-      } catch {
-        echecs++;
-      }
+    await Promise.allSettled(batch.map(async (client) => {
+      const personalizedHtml = campaign.contenu
+        .replace(/\{\{nom\}\}/g, client.nom || '')
+        .replace(/\{\{prenom\}\}/g, client.prenom || '')
+        .replace(/\{\{email\}\}/g, client.email || '');
+
+      const result = await sendMail({
+        to: client.email,
+        subject: campaign.sujet,
+        html: wrapTemplate(personalizedHtml, campaign.sujet),
+      });
+
+      if (result.success) envoyes++;
+      else echecs++;
     }));
+
+    // Pause de 300 ms entre les batches pour respecter les limites SMTP
+    if (i + BATCH < clients.length) {
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
 
   campaign.nombreEnvoyes = envoyes;
@@ -65,7 +88,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   });
 }
 
-function wrapTemplate(content: string, title: string, prenom: string): string {
+function wrapTemplate(content: string, title: string): string {
   return `
 <!DOCTYPE html>
 <html lang="fr">
@@ -78,16 +101,13 @@ function wrapTemplate(content: string, title: string, prenom: string): string {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 20px;">
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-        <!-- Header -->
         <tr><td style="background:linear-gradient(135deg,#1e3a5f,#2563eb);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
           <p style="color:#93c5fd;font-size:13px;font-weight:600;letter-spacing:3px;margin:0 0 8px;">NBBC PLATFORM</p>
           <h1 style="color:white;font-size:24px;font-weight:800;margin:0;">${title}</h1>
         </td></tr>
-        <!-- Body -->
         <tr><td style="background:white;padding:40px;border-radius:0 0 16px 16px;color:#334155;font-size:15px;line-height:1.7;">
           ${content}
         </td></tr>
-        <!-- Footer -->
         <tr><td style="padding:24px 40px;text-align:center;">
           <p style="color:#94a3b8;font-size:12px;margin:0;">
             Vous recevez cet email car vous êtes client NBBC.<br>

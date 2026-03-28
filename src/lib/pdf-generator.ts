@@ -10,6 +10,11 @@ interface jsPDFWithAutoTable extends jsPDF {
 export const generateKycPdf = (request: any) => {
   const doc = new jsPDF() as jsPDFWithAutoTable;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const statusLabel = request.statutKyc === 'VALIDE'
+    ? 'VALIDÉ'
+    : request.statutKyc === 'REJETE'
+      ? 'REJETÉ'
+      : 'EN ATTENTE';
   
   // Header
   doc.setFillColor(30, 58, 95); // Navy Blue
@@ -18,7 +23,7 @@ export const generateKycPdf = (request: any) => {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
-  doc.text("CERTIFICAT DE VÉRIFICATION KYC", pageWidth / 2, 20, { align: 'center' });
+  doc.text("ATTESTATION DE VERIFICATION KYC", pageWidth / 2, 20, { align: 'center' });
   
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
@@ -31,13 +36,17 @@ export const generateKycPdf = (request: any) => {
   doc.text(`ID de la demande : ${request._id}`, 20, 57);
 
   // Status Badge
-  const statusColor = request.statutKyc === 'VALIDE' ? [16, 185, 129] : [245, 158, 11]; // Green or Orange
+  const statusColor = request.statutKyc === 'VALIDE'
+    ? [16, 185, 129]
+    : request.statutKyc === 'REJETE'
+      ? [244, 63, 94]
+      : [245, 158, 11];
   doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
   doc.roundedRect(140, 43, 50, 10, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
-  doc.text(request.statutKyc === 'VALIDE' ? "STATUT : VALIDÉ" : "STATUT : EN ATTENTE", 165, 50, { align: 'center' });
+  doc.text(`STATUT : ${statusLabel}`, 165, 50, { align: 'center' });
 
   // Client Info Table
   doc.autoTable({

@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import KycRequest from '@/models/KycRequest';
 import Client from '@/models/Client';
+import { v2 as cloudinary } from 'cloudinary';
+import { sendKycSubmissionAdminEmail, sendKycSubmissionClientEmail } from '@/lib/kyc-email';
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY || process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // GET : Vérifier si un token est valide
 export async function GET(request: Request, context: { params: Promise<{ token: string }> }) {
@@ -33,10 +41,44 @@ export async function POST(request: Request, context: { params: Promise<{ token:
   }
 
   const body = await request.json();
-  const { nom, prenom, email, telephone, photoIdUrl, photoIdPublicId, selfieUrl, selfiePublicId, politiqueAcceptee } = body;
+  const {
+    nom,
+    prenom,
+    email,
+    telephone,
+    photoIdUrl,
+    photoIdPublicId,
+    selfieDataUrl,
+    politiqueAcceptee,
+  } = body;
 
   if (!politiqueAcceptee) {
     return NextResponse.json({ success: false, error: 'Vous devez accepter la politique.' }, { status: 400 });
+  }
+
+  if (!nom || !prenom || !email || !photoIdUrl || !photoIdPublicId || !selfieDataUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Informations incomplètes. Merci de remplir tous les champs et joindre les photos.' },
+      { status: 400 }
+    );
+  }
+
+  let selfieUrl = '';
+  let selfiePublicId = '';
+
+  try {
+    const uploadedSelfie = await cloudinary.uploader.upload(String(selfieDataUrl), {
+      folder: 'nbbc/kyc/selfies',
+      resource_type: 'image',
+    });
+    selfieUrl = uploadedSelfie.secure_url;
+    selfiePublicId = uploadedSelfie.public_id;
+  } catch (error) {
+    console.error('Erreur upload selfie KYC:', error);
+    return NextResponse.json(
+      { success: false, error: "Erreur lors de l'envoi du selfie. Veuillez réessayer." },
+      { status: 500 }
+    );
   }
 
   kycRequest.nom = nom;
@@ -52,6 +94,11 @@ export async function POST(request: Request, context: { params: Promise<{ token:
   kycRequest.statutKyc = 'EN_ATTENTE';
 
   await kycRequest.save();
+
+  await Promise.allSettled([
+    sendKycSubmissionClientEmail({ prenom, nom, email }),
+    sendKycSubmissionAdminEmail({ prenom, nom, email }, String(kycRequest._id)),
+  ]);
 
   return NextResponse.json({ success: true, message: 'Demande KYC soumise avec succès.' });
 }
