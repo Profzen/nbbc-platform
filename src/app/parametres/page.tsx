@@ -174,9 +174,9 @@ export default function ParametresPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60 inline-flex items-center justify-center gap-2"
               >
-                {saving ? 'Création en cours...' : 'Créer le compte'}
+                {saving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Création en cours...</> : 'Créer le compte'}
               </button>
             </form>
           </section>

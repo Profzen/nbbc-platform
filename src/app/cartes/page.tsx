@@ -164,8 +164,8 @@ export default function CartesPage() {
               {/* Boutons */}
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setModalMode(null)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors">Annuler</button>
-                <button onClick={handleSave} disabled={saving || !formData.clientId || !formData.identifiant} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold shadow-lg shadow-blue-500/30 disabled:opacity-50 transition-all">
-                  {saving ? 'Enregistrement...' : modalMode === 'add' ? 'Créer le compte' : 'Sauvegarder'}
+                <button onClick={handleSave} disabled={saving || !formData.clientId || !formData.identifiant} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold shadow-lg shadow-blue-500/30 disabled:opacity-50 transition-all inline-flex items-center justify-center gap-2">
+                  {saving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Enregistrement...</> : modalMode === 'add' ? 'Créer le compte' : 'Sauvegarder'}
                 </button>
               </div>
             </div>
