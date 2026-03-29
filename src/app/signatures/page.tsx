@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { PenTool, FileText, Upload, Plus, Edit3, Trash2, Eye, Link2, CheckCircle, Clock, X, Code } from 'lucide-react';
-import { CldUploadWidget } from 'next-cloudinary';
+import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const TABS = [
   { id: 'requests', label: 'Demandes de Signatures', icon: PenTool },
@@ -25,8 +26,8 @@ function htmlToEditableText(html: string): string {
 }
 
 export default function SignaturesAdminPage() {
-  const hasCloudinaryApiKey = Boolean(process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
   const CLIENT_SEARCH_LIMIT = 8;
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
 
   const [activeTab, setActiveTab] = useState('requests');
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,8 @@ export default function SignaturesAdminPage() {
   });
   const [templateForm, setTemplateForm] = useState({ id: '', nom: '', contenuTexte: '' });
   const [clientSearch, setClientSearch] = useState('');
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
   // Nouvellement généré
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
@@ -135,6 +138,57 @@ export default function SignaturesAdminPage() {
     alert('Lien copié dans le presse-papiers');
   };
 
+  const deleteRequest = async (id: string) => {
+    if (!confirm('Supprimer cette demande de signature ?')) return;
+    setDeletingRequestId(id);
+    try {
+      const res = await fetch(`/api/signatures/requests/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Suppression impossible.');
+      } else {
+        await fetchAll();
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Suppression impossible.');
+    } finally {
+      setDeletingRequestId(null);
+    }
+  };
+
+  const onPickPdf = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Veuillez sélectionner un fichier PDF.');
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+      return;
+    }
+
+    setUploadingPdf(true);
+    try {
+      const uploaded = await uploadFileToCloudinary(file, {
+        folder: 'signature-documents',
+        resourceType: 'raw',
+      });
+
+      setRequestForm((prev) => ({
+        ...prev,
+        fichierPdfUrl: uploaded.secureUrl,
+        fichierPdfPublicId: uploaded.publicId,
+        fichierPdfResourceType: uploaded.resourceType || 'raw',
+        fichierPdfDeliveryType: uploaded.deliveryType || 'upload',
+        fichierPdfFormat: uploaded.format || 'pdf',
+      }));
+    } catch (e: any) {
+      alert(e?.message || 'Upload PDF impossible.');
+    } finally {
+      setUploadingPdf(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+    }
+  };
+
   const clientSearchNormalized = clientSearch.trim().toLowerCase();
   const filteredClientOptions = clientSearchNormalized
     ? clients
@@ -181,7 +235,7 @@ export default function SignaturesAdminPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-slate-400">Chargement...</div>
+        <LoadingSpinner className="py-20" label="Chargement des demandes..." size="md" />
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           
@@ -226,15 +280,25 @@ export default function SignaturesAdminPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {req.statut === 'EN_ATTENTE' ? (
-                        <button onClick={() => copyLink(window.location.origin + `/sign/${req.token}`)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center justify-center ml-auto" title="Copier le lien public">
-                          <Link2 size={18} />
+                      <div className="flex items-center justify-end gap-1">
+                        {req.statut === 'EN_ATTENTE' ? (
+                          <button onClick={() => copyLink(window.location.origin + `/sign/${req.token}`)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center justify-center" title="Copier le lien public">
+                            <Link2 size={18} />
+                          </button>
+                        ) : (
+                          <a href={req.signatureImageUrl} target="_blank" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center justify-center" title="Voir la signature">
+                            <Eye size={18} />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => deleteRequest(req._id)}
+                          disabled={deletingRequestId === req._id}
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg flex items-center justify-center disabled:opacity-50"
+                          title="Supprimer la demande"
+                        >
+                          {deletingRequestId === req._id ? <span className="w-4 h-4 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin" /> : <Trash2 size={16} />}
                         </button>
-                      ) : (
-                        <a href={req.signatureImageUrl} target="_blank" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center justify-center ml-auto" title="Voir la signature">
-                          <Eye size={18} />
-                        </a>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -348,33 +412,31 @@ export default function SignaturesAdminPage() {
                           <button onClick={()=> setRequestForm({...requestForm, fichierPdfUrl: '', fichierPdfPublicId: '', fichierPdfResourceType: '', fichierPdfDeliveryType: '', fichierPdfFormat: ''})} className="text-emerald-900"><X size={16}/></button>
                         </div>
                       ) : (
-                        <CldUploadWidget 
-                          signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
-                          uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
-                          onSuccess={(res:any) => {
-                            const info = res?.info || {};
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              fichierPdfUrl: info.secure_url || '',
-                              fichierPdfPublicId: info.public_id || '',
-                              fichierPdfResourceType: info.resource_type || 'raw',
-                              fichierPdfDeliveryType: info.type || 'upload',
-                              fichierPdfFormat: info.format || 'pdf',
-                            }));
-                          }}
-                          options={{ clientAllowedFormats: ['pdf'], maxFiles: 1, resourceType: 'raw' }}
-                        >
-                          {({ open }) => (
-                            <button onClick={(_)=>open()} className="w-full py-8 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50 flex flex-col items-center text-indigo-600 hover:bg-indigo-100 transition">
-                              <Upload size={24} className="mb-2"/> <span className="font-bold">Cliquez pour ajouter le PDF</span>
-                            </button>
-                          )}
-                        </CldUploadWidget>
-                      )}
-                      {!hasCloudinaryApiKey && (
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-                          Configuration Cloudinary publique absente: upload en mode non-signé (upload preset).
-                        </p>
+                        <>
+                          <input
+                            ref={pdfInputRef}
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            className="hidden"
+                            onChange={onPickPdf}
+                          />
+                          <button
+                            onClick={() => pdfInputRef.current?.click()}
+                            disabled={uploadingPdf}
+                            className="w-full py-8 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50 flex flex-col items-center text-indigo-600 hover:bg-indigo-100 transition disabled:opacity-60"
+                          >
+                            {uploadingPdf ? (
+                              <>
+                                <span className="w-6 h-6 border-2 border-indigo-300 border-t-indigo-700 rounded-full animate-spin mb-2" />
+                                <span className="font-bold">Upload PDF en cours...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload size={24} className="mb-2" /> <span className="font-bold">Cliquez pour ajouter le PDF</span>
+                              </>
+                            )}
+                          </button>
+                        </>
                       )}
                     </div>
                   )}

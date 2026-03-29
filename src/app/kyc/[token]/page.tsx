@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { ShieldCheck, Camera, Upload, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
-import { CldUploadWidget } from 'next-cloudinary';
+import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
 
 type Step = 'loading' | 'invalid' | 'form' | 'selfie' | 'policy' | 'submitted' | 'already_done';
 
@@ -16,8 +16,10 @@ export default function KycPublicPage() {
   const [politiqueAcceptee, setPolitiqueAcceptee] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingId, setUploadingId] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const idInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -82,6 +84,26 @@ export default function KycPublicPage() {
       else { setError(data.error || 'Erreur.'); }
     } catch { setError('Erreur serveur.'); } 
     finally { setLoading(false); }
+  };
+
+  const onPickIdentityFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(true);
+    setError('');
+    try {
+      const uploaded = await uploadFileToCloudinary(file, {
+        folder: 'kyc-id',
+        resourceType: 'auto',
+      });
+      setPhotoId({ url: uploaded.secureUrl, publicId: uploaded.publicId });
+    } catch (e: any) {
+      setError(e?.message || "Impossible d'uploader la pièce d'identité.");
+    } finally {
+      setUploadingId(false);
+      if (idInputRef.current) idInputRef.current.value = '';
+    }
   };
 
   if (step === 'loading') return (
@@ -193,15 +215,27 @@ export default function KycPublicPage() {
                     </div>
                   </div>
                 ) : (
-                  <CldUploadWidget signatureEndpoint="/api/cloudinary/sign" onSuccess={(result: any) => { const info = result.info; setPhotoId({ url: info.secure_url, publicId: info.public_id }); }} options={{ maxFiles: 1 }}>
-                    {({ open }) => (
-                      <button type="button" onClick={() => open()} className="w-full border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl p-6 flex flex-col items-center gap-2 text-slate-400 transition-all">
-                        <Upload size={24} />
-                        <span className="text-sm font-medium">Cliquez pour uploader votre pièce d'identité</span>
-                        <span className="text-xs">Passeport, CNI, Permis de conduire</span>
-                      </button>
-                    )}
-                  </CldUploadWidget>
+                  <>
+                    <input
+                      ref={idInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      className="hidden"
+                      onChange={onPickIdentityFile}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => idInputRef.current?.click()}
+                      disabled={uploadingId}
+                      className="w-full border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl p-6 flex flex-col items-center gap-2 text-slate-400 transition-all disabled:opacity-60"
+                    >
+                      {uploadingId ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
+                      <span className="text-sm font-medium">
+                        {uploadingId ? 'Upload en cours...' : "Cliquez pour uploader votre pièce d'identité"}
+                      </span>
+                      <span className="text-xs">Passeport, CNI, Permis de conduire</span>
+                    </button>
+                  </>
                 )}
               </div>
 

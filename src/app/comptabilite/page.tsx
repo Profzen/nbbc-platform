@@ -33,6 +33,7 @@ import {
   type AccountingTransaction,
   type AccountingTransactionType,
 } from '@/lib/accounting';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const DEFAULT_USD_RATE = 590;
 
@@ -873,7 +874,11 @@ export default function ComptabilitePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Chargement...</td></tr>
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                      <LoadingSpinner label="Chargement..." size="sm" />
+                    </td>
+                  </tr>
                 ) : filteredTransactions.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune ligne trouvée.</td></tr>
                 ) : filteredTransactions.map((item, index) => {
@@ -947,7 +952,11 @@ export default function ComptabilitePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Chargement...</td></tr>
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                      <LoadingSpinner label="Chargement..." size="sm" />
+                    </td>
+                  </tr>
                 ) : filteredDepots.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune opération trouvée.</td></tr>
                 ) : filteredDepots.map((item, index) => {

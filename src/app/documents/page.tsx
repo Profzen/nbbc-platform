@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { FileText, Search, User, CheckCircle, Clock } from 'lucide-react';
-import { CldUploadWidget } from 'next-cloudinary';
+import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 export default function DocumentsPage() {
-  const hasCloudinaryApiKey = Boolean(process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
-
   const [clients, setClients] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchClients();
@@ -61,6 +62,35 @@ export default function DocumentsPage() {
     }
   };
 
+  const onPickFiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!selectedClient || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      for (const file of files.slice(0, 5)) {
+        const uploaded = await uploadFileToCloudinary(file, {
+          folder: 'kyc-documents',
+          resourceType: 'auto',
+        });
+
+        await handleUploadSuccess({
+          info: {
+            original_filename: uploaded.originalFilename,
+            secure_url: uploaded.secureUrl,
+            format: uploaded.format,
+            public_id: uploaded.publicId,
+          },
+        });
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Upload impossible. Vérifiez la configuration Cloudinary.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col">
       <header className="flex justify-between items-center mb-8 shrink-0">
@@ -87,7 +117,7 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-2">
             {loading ? (
-               <div className="p-4 text-center text-slate-400 text-sm">Chargement...</div>
+              <LoadingSpinner className="p-4" label="Chargement des clients..." size="sm" />
             ) : filteredClients.map(client => (
               <button 
                 key={client._id}
@@ -126,38 +156,30 @@ export default function DocumentsPage() {
                   </div>
                 </div>
                 
-                <CldUploadWidget 
-                  signatureEndpoint={hasCloudinaryApiKey ? '/api/cloudinary/sign' : undefined}
-                  uploadPreset={hasCloudinaryApiKey ? undefined : 'ml_default'}
-                  onSuccess={handleUploadSuccess}
-                  options={{
-                    multiple: true,
-                    maxFiles: 5,
-                    language: 'fr',
-                    text: {
-                      fr: {
-                        menu: { files: 'Fichiers' },
-                        local: { browse: 'Sélectionner des fichiers', dd_title_single: 'Glissez un document', dd_title_multi: 'Glissez des documents' }
-                      }
-                    }
-                  }}
-                >
-                  {({ open }) => {
-                    return (
-                      <button 
-                        onClick={() => open()}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium shadow transition-colors"
-                      >
-                        Ajouter un Document
-                      </button>
-                    );
-                  }}
-                </CldUploadWidget>
-                {!hasCloudinaryApiKey && (
-                  <p className="ml-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    Clé Cloudinary publique absente: upload en mode non-signé (upload preset).
-                  </p>
-                )}
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    className="hidden"
+                    onChange={onPickFiles}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium shadow transition-colors disabled:opacity-60 inline-flex items-center gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Upload en cours...
+                      </>
+                    ) : (
+                      'Ajouter un Document'
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 p-6 overflow-y-auto bg-slate-50/30">

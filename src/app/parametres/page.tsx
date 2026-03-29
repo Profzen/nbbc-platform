@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Shield, UserPlus, Users } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 type UserItem = {
   _id?: string;
@@ -91,7 +92,7 @@ export default function ParametresPage() {
     return (
       <div className="p-8 max-w-5xl mx-auto">
         <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-          <p className="text-slate-600">Chargement...</p>
+          <LoadingSpinner label="Chargement..." size="sm" />
         </div>
       </div>
     );
@@ -187,7 +188,7 @@ export default function ParametresPage() {
             </div>
 
             {loadingUsers ? (
-              <p className="text-sm text-slate-500">Chargement des utilisateurs...</p>
+              <LoadingSpinner label="Chargement des utilisateurs..." size="sm" className="py-4" />
             ) : users.length === 0 ? (
               <p className="text-sm text-slate-500">Aucun utilisateur trouvé.</p>
             ) : (

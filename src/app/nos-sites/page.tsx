@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { Globe, Plus, Save, Trash2, ExternalLink, Shield } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 type CompanySite = {
   _id: string;
@@ -197,7 +198,7 @@ export default function NosSitesPage() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Chargement des sites...</p>
+          <LoadingSpinner label="Chargement des sites..." size="sm" className="py-4" />
         ) : sites.length === 0 ? (
           <p className="text-sm text-slate-500">Aucun site configuré.</p>
         ) : (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Clock, XCircle, Eye, Check, X, Link2, Copy, CheckCheck, FileText } from 'lucide-react';
 import { generateKycPdf } from '@/lib/pdf-generator';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 type TabType = 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
 
@@ -123,7 +124,7 @@ export default function KycAdminPage() {
         {/* Liste des demandes */}
         <div className="flex-1 space-y-3">
           {loading ? (
-            <div className="text-center py-12 text-slate-400">Chargement...</div>
+            <LoadingSpinner className="py-12" label="Chargement..." size="sm" />
           ) : requests.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
               <p className="text-slate-400 font-medium">Aucune demande {activeTab === 'EN_ATTENTE' ? 'en attente' : activeTab === 'VALIDE' ? 'validée' : 'rejetée'}</p>

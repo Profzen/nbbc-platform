@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import SignatureCanvas from 'react-signature-canvas';
 import { PenTool, CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
+import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 export default function SignaturePage() {
   const params = useParams();
@@ -102,53 +104,23 @@ export default function SignaturePage() {
     setSubmitting(true);
     try {
       // 1. Convertir le canvas en image base64
-      const signatureDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
+      const signatureDataUrl = sigCanvas.current.getCanvas().toDataURL('image/png');
 
       // 2. Convertir le dataURL en Blob réel (nécessaire pour Cloudinary)
       const blob = await (await fetch(signatureDataUrl)).blob();
-      const fd = new FormData();
-      fd.append('file', blob, 'signature.png');
-      const timestamp = Math.floor(Date.now() / 1000);
-      const signRes = await fetch('/api/cloudinary/sign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paramsToSign: {
-            timestamp,
-            folder: 'signatures'
-          }
-        })
+      const file = new File([blob], 'signature.png', { type: 'image/png' });
+      const uploadData = await uploadFileToCloudinary(file, {
+        folder: 'signatures',
+        resourceType: 'image',
       });
-
-      if (!signRes.ok) {
-        const signPayload = await readJsonSafely(signRes, 'Signature Cloudinary impossible.').catch(() => null);
-        throw new Error(signPayload?.error || 'Signature Cloudinary impossible. Vérifiez la configuration serveur.');
-      }
-
-      const signData = await readJsonSafely(signRes, 'Réponse Cloudinary invalide.');
-      fd.append('api_key', signData.apiKey);
-      fd.append('timestamp', String(timestamp));
-      fd.append('signature', signData.signature);
-      fd.append('folder', 'signatures');
-
-      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`, {
-        method: 'POST',
-        body: fd
-      });
-      const uploadData = await readJsonSafely(uploadRes, 'Réponse Cloudinary invalide pendant upload.');
-
-      if (!uploadData.secure_url) {
-        console.error('Cloudinary error:', uploadData);
-        throw new Error("Erreur d'upload Cloudinary : " + (uploadData.error?.message || 'inconnu'));
-      }
 
       // 3. Valider la signature côté backend NBBC
       const res = await fetch(`/api/signatures/${token}/sign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          signatureImageUrl: uploadData.secure_url,
-          signatureImagePublicId: uploadData.public_id
+          signatureImageUrl: uploadData.secureUrl,
+          signatureImagePublicId: uploadData.publicId
         })
       });
 
@@ -164,7 +136,11 @@ export default function SignaturePage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">Chargement sécurisé...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <LoadingSpinner size="lg" label="Chargement sécurisé..." />
+    </div>
+  );
 
   if ((error && !data) || (data?.statut && data.statut !== 'EN_ATTENTE')) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
