@@ -3,6 +3,7 @@ import dbConnect from '@/lib/mongodb';
 import Campaign from '@/models/Campaign';
 import Client from '@/models/Client';
 import GroupeClient from '@/models/GroupeClient';
+import DeliveryLog from '@/models/DeliveryLog';
 import { sendMail } from '@/lib/mailer';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -49,6 +50,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   let envoyes = 0;
   let echecs = 0;
 
+  // Récupérer les IDs de clients pour les logs
+  const clientMap = new Map<string, string>();
+  const allClients = await Client.find({ email: { $in: clients.map(c => c.email) } }).select('_id email');
+  allClients.forEach(c => clientMap.set(c.email, c._id.toString()));
+
   // Envoi séquentiel par batch de 5 pour ne pas saturer le serveur SMTP
   const BATCH = 5;
   for (let i = 0; i < clients.length; i += BATCH) {
@@ -65,6 +71,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         subject: campaign.sujet,
         html: wrapTemplate(personalizedHtml, campaign.sujet),
       });
+
+      const log = new (await import('@/models/DeliveryLog')).default({
+        campaign: id,
+        recipient: clientMap.get(client.email) || null,
+        email: client.email,
+        status: result.success ? 'SENT' : 'FAILED',
+        errorMessage: result.success ? null : 'Échec d\'envoi SMTP',
+      });
+      await log.save();
 
       if (result.success) envoyes++;
       else echecs++;
