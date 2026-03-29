@@ -5,12 +5,34 @@ import {
   Plus, Send, Trash2, Edit3, X, Mail, Users, Clock, CheckCircle,
   AlertCircle, Copy, Megaphone, Search, UserCheck,
   FolderOpen, Globe, Eye, MessageSquare, Layers, Tag,
+  BarChart2, BookMarked, Calendar, Save, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type CibleType = 'TOUS' | 'TYPE_CLIENT' | 'GROUPES' | 'SELECTIONNES';
 type Canal = 'EMAIL' | 'SMS';
-type Tab = 'campagnes' | 'groupes';
+type Tab = 'campagnes' | 'groupes' | 'analytiques';
+
+interface CampaignTemplate {
+  _id: string;
+  nom: string;
+  sujet: string;
+  contenu: string;
+  canal: Canal;
+  categorie: string;
+  usageCount: number;
+}
+
+interface AnalyticsData {
+  total: number;
+  sent: number;
+  failed: number;
+  deliveryRate: number;
+  openRate: number;
+  clickRate: number;
+  failureReasons: { reason: string; count: number }[];
+  logs: { email: string; status: string; sentAt: string; errorMessage?: string }[];
+}
 
 interface Client { _id: string; nom: string; prenom: string; email: string; telephone?: string; typeClient: string; }
 interface Groupe { _id: string; nom: string; description?: string; couleur: string; clientIds: Client[]; }
@@ -68,11 +90,24 @@ export default function MarketingPage() {
   const [clientsLoaded, setClientsLoaded] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
 
+  // --- Templates DB
+  const [dbTemplates, setDbTemplates] = useState<CampaignTemplate[]>([]);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateNom, setTemplateNom] = useState('');
+  const [templateCategorie, setTemplateCategorie] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // --- Analytics
+  const [analyticsId, setAnalyticsId] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
   // --- Formulaire campagne
   const [campForm, setCampForm] = useState({
     titre: '', sujet: '', contenu: '', canal: 'EMAIL' as Canal,
     cibleType: 'TOUS' as CibleType, cible: 'TOUS',
     groupeIds: [] as string[], destinataireIds: [] as string[],
+    isScheduled: false, scheduledAt: '',
   });
 
   // --- Formulaire groupe
@@ -98,6 +133,23 @@ export default function MarketingPage() {
     setLoadingGroupes(false);
   }, []);
 
+  const fetchDbTemplates = useCallback(async () => {
+    const res = await fetch('/api/marketing/templates');
+    const data = await res.json();
+    if (data.success) setDbTemplates(data.data);
+  }, []);
+
+  const fetchAnalytics = useCallback(async (id: string) => {
+    if (analyticsId === id) { setAnalyticsId(null); setAnalyticsData(null); return; }
+    setAnalyticsId(id);
+    setAnalyticsData(null);
+    setLoadingAnalytics(true);
+    const res = await fetch(`/api/marketing/campaigns/${id}/analytics`);
+    const data = await res.json();
+    if (data.success) setAnalyticsData(data.data);
+    setLoadingAnalytics(false);
+  }, [analyticsId]);
+
   const loadClients = useCallback(async () => {
     if (clientsLoaded) return;
     const res = await fetch('/api/clients?limit=9999');
@@ -106,14 +158,17 @@ export default function MarketingPage() {
     setClientsLoaded(true);
   }, [clientsLoaded]);
 
-  useEffect(() => { fetchCampaigns(); fetchGroupes(); }, [fetchCampaigns, fetchGroupes]);
+  useEffect(() => { fetchCampaigns(); fetchGroupes(); fetchDbTemplates(); }, [fetchCampaigns, fetchGroupes, fetchDbTemplates]);
 
   // ─── Campagne helpers ───────────────────────────────────────────────────────
   const openNewCamp = useCallback(async () => {
     await loadClients();
-    setCampForm({ titre: '', sujet: '', contenu: '', canal: 'EMAIL', cibleType: 'TOUS', cible: 'TOUS', groupeIds: [], destinataireIds: [] });
+    setCampForm({ titre: '', sujet: '', contenu: '', canal: 'EMAIL', cibleType: 'TOUS', cible: 'TOUS', groupeIds: [], destinataireIds: [], isScheduled: false, scheduledAt: '' });
     setClientSearch('');
     setShowPreview(false);
+    setShowSaveTemplate(false);
+    setTemplateNom('');
+    setTemplateCategorie('');
     setEditCamp(null);
     setShowCampModal(true);
   }, [loadClients]);
@@ -124,19 +179,47 @@ export default function MarketingPage() {
       titre: c.titre, sujet: c.sujet, contenu: c.contenu, canal: c.canal || 'EMAIL',
       cibleType: c.cibleType || 'TOUS', cible: c.cible || 'TOUS',
       groupeIds: c.groupeIds || [], destinataireIds: c.destinataireIds || [],
+      isScheduled: c.isScheduled || false,
+      scheduledAt: c.scheduledAt ? new Date(c.scheduledAt).toISOString().slice(0, 16) : '',
     });
     setClientSearch('');
     setShowPreview(false);
+    setShowSaveTemplate(false);
+    setTemplateNom('');
+    setTemplateCategorie('');
     setEditCamp(c);
     setShowCampModal(true);
   };
 
   const saveCamp = async () => {
+    const payload = {
+      ...campForm,
+      scheduledAt: campForm.isScheduled && campForm.scheduledAt ? new Date(campForm.scheduledAt).toISOString() : null,
+    };
     const url = editCamp ? `/api/marketing/campaigns/${editCamp._id}` : '/api/marketing/campaigns';
     const method = editCamp ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campForm) });
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await res.json();
     if (data.success) { setShowCampModal(false); fetchCampaigns(); }
+  };
+
+  const saveAsTemplate = async () => {
+    if (!templateNom.trim()) return;
+    setSavingTemplate(true);
+    const res = await fetch('/api/marketing/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nom: templateNom, sujet: campForm.sujet, contenu: campForm.contenu, canal: campForm.canal, categorie: templateCategorie }),
+    });
+    const data = await res.json();
+    if (data.success) { setShowSaveTemplate(false); setTemplateNom(''); setTemplateCategorie(''); fetchDbTemplates(); }
+    setSavingTemplate(false);
+  };
+
+  const loadTemplate = async (tpl: CampaignTemplate) => {
+    setCampForm(f => ({ ...f, sujet: tpl.sujet, contenu: tpl.contenu, canal: tpl.canal }));
+    // Incrémenter le compteur d'utilisation
+    fetch(`/api/marketing/templates/${tpl._id}`, { method: 'PATCH' }).catch(() => {});
   };
 
   const deleteCamp = async (id: string) => {
@@ -379,16 +462,33 @@ export default function MarketingPage() {
                 </div>
               )}
 
-              {/* Templates */}
+              {/* Templates locaux */}
               {campForm.canal === 'EMAIL' && (
                 <div>
-                  <label className="label-xs">Partir d'un template</label>
+                  <label className="label-xs">Partir d'un template prédéfini</label>
                   <div className="flex gap-2 flex-wrap">
                     {TEMPLATES.map(tpl => (
                       <button key={tpl.nom} type="button"
                         onClick={() => setCampForm(f => ({ ...f, sujet: tpl.sujet, contenu: tpl.contenu }))}
                         className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-600 rounded-lg transition-colors flex items-center gap-1.5">
                         <Copy size={12} /> {tpl.nom}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Templates DB sauvegardés */}
+              {dbTemplates.filter(t => t.canal === campForm.canal || !t.canal).length > 0 && (
+                <div>
+                  <label className="label-xs">Mes templates sauvegardés ({dbTemplates.filter(t => t.canal === campForm.canal || !t.canal).length})</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {dbTemplates.filter(t => t.canal === campForm.canal || !t.canal).map(tpl => (
+                      <button key={tpl._id} type="button"
+                        onClick={() => loadTemplate(tpl)}
+                        className="px-3 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors flex items-center gap-1.5 border border-purple-100">
+                        <BookMarked size={12} /> {tpl.nom}
+                        {tpl.usageCount > 0 && <span className="text-purple-400">×{tpl.usageCount}</span>}
                       </button>
                     ))}
                   </div>
@@ -432,6 +532,69 @@ export default function MarketingPage() {
                   )}
                 </div>
               )}
+
+              {/* Sauvegarder comme template */}
+              {campForm.contenu && (
+                <div className="border border-dashed border-purple-200 rounded-xl p-4 bg-purple-50/50">
+                  <button type="button" onClick={() => setShowSaveTemplate(p => !p)}
+                    className="flex items-center gap-2 text-xs font-bold text-purple-700 hover:text-purple-900 w-full">
+                    <Save size={13} />
+                    Sauvegarder comme template réutilisable
+                    {showSaveTemplate ? <ChevronUp size={13} className="ml-auto" /> : <ChevronDown size={13} className="ml-auto" />}
+                  </button>
+                  {showSaveTemplate && (
+                    <div className="mt-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label-xs">Nom du template *</label>
+                          <input type="text" value={templateNom} onChange={e => setTemplateNom(e.target.value)}
+                            className="input-base" placeholder="Ex : Promo Été 2026" />
+                        </div>
+                        <div>
+                          <label className="label-xs">Catégorie</label>
+                          <input type="text" value={templateCategorie} onChange={e => setTemplateCategorie(e.target.value)}
+                            className="input-base" placeholder="Ex : Newsletter" />
+                        </div>
+                      </div>
+                      <button type="button" onClick={saveAsTemplate} disabled={!templateNom.trim() || savingTemplate}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-colors">
+                        <BookMarked size={13} />
+                        {savingTemplate ? 'Sauvegarde…' : 'Sauvegarder le template'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Planification */}
+              <div className="border border-dashed border-amber-200 rounded-xl p-4 bg-amber-50/50">
+                <div className="flex items-center gap-3">
+                  <Calendar size={16} className="text-amber-600 shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-amber-800">Envoi programmé</div>
+                    <div className="text-xs text-amber-600">Le cron Vercel vérifie toutes les heures</div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={campForm.isScheduled}
+                      onChange={e => setCampForm(f => ({ ...f, isScheduled: e.target.checked, scheduledAt: e.target.checked ? f.scheduledAt : '' }))} />
+                    <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+                {campForm.isScheduled && (
+                  <div className="mt-3">
+                    <label className="label-xs">Date et heure d'envoi *</label>
+                    <input type="datetime-local" value={campForm.scheduledAt}
+                      onChange={e => setCampForm(f => ({ ...f, scheduledAt: e.target.value }))}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="input-base" />
+                    {campForm.scheduledAt && (
+                      <p className="text-xs text-amber-700 mt-1 font-medium">
+                        ⏰ Envoi prévu le {new Date(campForm.scheduledAt).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-5 border-t border-slate-100 flex gap-3 shrink-0 bg-slate-50/50">
@@ -441,10 +604,11 @@ export default function MarketingPage() {
                 disabled={
                   !campForm.titre || !campForm.sujet || !campForm.contenu ||
                   (campForm.cibleType === 'SELECTIONNES' && campForm.destinataireIds.length === 0) ||
-                  (campForm.cibleType === 'GROUPES' && campForm.groupeIds.length === 0)
+                  (campForm.cibleType === 'GROUPES' && campForm.groupeIds.length === 0) ||
+                  (campForm.isScheduled && !campForm.scheduledAt)
                 }
                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg disabled:opacity-50">
-                {editCamp ? 'Sauvegarder' : 'Créer la campagne'}
+                {editCamp ? 'Sauvegarder' : campForm.isScheduled ? '⏰ Planifier l\'envoi' : 'Créer la campagne'}
               </button>
             </div>
           </div>
@@ -590,6 +754,7 @@ export default function MarketingPage() {
         {([
           { id: 'campagnes', label: 'Campagnes', icon: Megaphone },
           { id: 'groupes', label: 'Groupes de clients', icon: Layers },
+          { id: 'analytiques', label: 'Analytiques', icon: BarChart2 },
         ] as { id: Tab; label: string; icon: React.ElementType }[]).map(t => {
           const Icon = t.icon;
           return (
@@ -629,6 +794,11 @@ export default function MarketingPage() {
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.statut === 'ENVOYE' ? 'bg-emerald-100 text-emerald-700' : c.statut === 'ECHEC' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
                       {c.statut === 'ENVOYE' ? '✅ Envoyée' : c.statut === 'ECHEC' ? '❌ Erreur' : '✏️ Brouillon'}
                     </span>
+                    {c.isScheduled && c.statut === 'BROUILLON' && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">
+                        ⏰ Planifiée {c.scheduledAt ? new Date(c.scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    )}
                     <span className="text-xs bg-indigo-50 text-indigo-600 font-semibold px-2 py-0.5 rounded-full">
                       {c.canal === 'SMS' ? '💬 SMS' : '📧 Email'}
                     </span>
@@ -654,6 +824,12 @@ export default function MarketingPage() {
                   {c.statut !== 'ENVOYE' && (
                     <button onClick={() => openEditCamp(c)} className="p-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-600 text-slate-500 rounded-xl transition-colors" title="Modifier">
                       <Edit3 size={15} />
+                    </button>
+                  )}
+                  {c.statut === 'ENVOYE' && (
+                    <button onClick={() => { setActiveTab('analytiques'); fetchAnalytics(c._id); }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 font-bold rounded-xl text-sm transition-colors" title="Voir les analytics">
+                      <BarChart2 size={14} /> Stats
                     </button>
                   )}
                   {c.statut !== 'ENVOYE' && (
@@ -741,6 +917,128 @@ export default function MarketingPage() {
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors">
                     <Send size={13} /> Lancer une campagne
                   </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── ONGLET ANALYTIQUES ──────────────────────────────────────────────── */}
+      {activeTab === 'analytiques' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart2 size={18} className="text-indigo-600" />
+            <h2 className="font-bold text-slate-700">Statistiques des campagnes envoyées</h2>
+          </div>
+
+          {campaigns.filter(c => c.statut === 'ENVOYE').length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+              <BarChart2 size={40} className="text-slate-200 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-slate-700">Aucune campagne envoyée</h3>
+              <p className="text-slate-400 text-sm mt-1">Les stats apparaîtront ici après l&apos;envoi d&apos;une campagne.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {campaigns.filter(c => c.statut === 'ENVOYE').map(c => (
+                <div key={c._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  {/* Header campagne */}
+                  <button
+                    className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 transition-colors"
+                    onClick={() => fetchAnalytics(c._id)}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <CheckCircle size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 truncate">{c.titre}</div>
+                        <div className="text-xs text-slate-400">{c.canal === 'SMS' ? '💬 SMS' : '📧 Email'} · {c.nombreDestinataires} destinataires · {c.dateEnvoi ? new Date(c.dateEnvoi).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-4">
+                      <div className="text-right hidden sm:block">
+                        <div className="font-black text-emerald-700">{c.nombreDestinataires ? Math.round((c.nombreEnvoyes / c.nombreDestinataires) * 100) : 0}%</div>
+                        <div className="text-xs text-slate-400">délivrance</div>
+                      </div>
+                      {analyticsId === c._id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+                    </div>
+                  </button>
+
+                  {/* Panel analytics */}
+                  {analyticsId === c._id && (
+                    <div className="border-t border-slate-100 p-5">
+                      {loadingAnalytics ? (
+                        <div className="flex items-center gap-2 text-slate-400 py-4 justify-center">
+                          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                          Chargement des analytics…
+                        </div>
+                      ) : analyticsData ? (
+                        <div className="space-y-5">
+                          {/* KPIs */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                              { label: 'Destinataires', value: analyticsData.total, color: 'text-slate-700', bg: 'bg-slate-50' },
+                              { label: 'Envoyés', value: analyticsData.sent, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+                              { label: 'Échecs', value: analyticsData.failed, color: 'text-rose-700', bg: 'bg-rose-50' },
+                              { label: 'Taux délivrance', value: `${analyticsData.deliveryRate}%`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+                            ].map(kpi => (
+                              <div key={kpi.label} className={`${kpi.bg} rounded-xl p-3 text-center`}>
+                                <div className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</div>
+                                <div className="text-xs text-slate-500 mt-0.5">{kpi.label}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Barre de progression délivrance */}
+                          <div>
+                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                              <span>Taux de délivrance</span>
+                              <span className="font-bold text-emerald-700">{analyticsData.deliveryRate}%</span>
+                            </div>
+                            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full transition-all"
+                                style={{ width: `${analyticsData.deliveryRate}%` }} />
+                            </div>
+                          </div>
+
+                          {/* Erreurs fréquentes */}
+                          {analyticsData.failureReasons?.length > 0 && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Top erreurs</div>
+                              <div className="space-y-1.5">
+                                {analyticsData.failureReasons.slice(0, 3).map((r: any, i: number) => (
+                                  <div key={i} className="flex items-center justify-between bg-rose-50 px-3 py-2 rounded-lg text-xs">
+                                    <span className="text-rose-700 font-medium truncate mr-2">{r.reason}</span>
+                                    <span className="text-rose-500 font-bold shrink-0">{r.count}×</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Derniers logs */}
+                          {analyticsData.logs?.length > 0 && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Derniers envois ({analyticsData.logs.length})</div>
+                              <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-100 rounded-xl p-2">
+                                {analyticsData.logs.slice(0, 20).map((log: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-slate-50">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'SENT' ? 'bg-emerald-400' : log.status === 'FAILED' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                                    <span className="text-slate-600 truncate flex-1">{log.email}</span>
+                                    <span className={`font-bold shrink-0 ${log.status === 'SENT' ? 'text-emerald-600' : 'text-rose-600'}`}>{log.status}</span>
+                                    {log.sentAt && <span className="text-slate-300 shrink-0">{new Date(log.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 text-sm text-center py-4">Aucune donnée disponible pour cette campagne.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

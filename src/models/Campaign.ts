@@ -21,6 +21,9 @@ export interface ICampaign extends Document {
   nombreEnvoyes: number;
   nombreEchecs: number;
   dateEnvoi?: Date;
+  // Envoi programmé
+  isScheduled: boolean;
+  scheduledAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,7 +54,9 @@ const CampaignSchema: Schema = new Schema(
     nombreDestinataires: { type: Number, default: 0 },
     nombreEnvoyes: { type: Number, default: 0 },
     nombreEchecs: { type: Number, default: 0 },
-    dateEnvoi: { type: Date }
+    dateEnvoi: { type: Date },
+    isScheduled: { type: Boolean, default: false },
+    scheduledAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

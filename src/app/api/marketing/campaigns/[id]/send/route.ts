@@ -5,6 +5,7 @@ import Client from '@/models/Client';
 import GroupeClient from '@/models/GroupeClient';
 import DeliveryLog from '@/models/DeliveryLog';
 import { sendMail } from '@/lib/mailer';
+import { sendSms } from '@/lib/sms-sender';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -17,29 +18,36 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   // --- Résolution des destinataires selon le mode de ciblage ---
-  let clients: { email: string; nom: string; prenom: string }[] = [];
+  let clients: { email: string; nom: string; prenom: string; telephone?: string }[] = [];
 
   const cibleType = campaign.cibleType || 'TOUS';
 
+  const selectFields = 'email nom prenom telephone';
+
   if (cibleType === 'SELECTIONNES' && campaign.destinataireIds?.length) {
-    clients = await Client.find({ _id: { $in: campaign.destinataireIds } }).select('email nom prenom');
+    clients = await Client.find({ _id: { $in: campaign.destinataireIds } }).select(selectFields);
   } else if (cibleType === 'GROUPES' && campaign.groupeIds?.length) {
-    const groupes = await GroupeClient.find({ _id: { $in: campaign.groupeIds } }).populate('clientIds', 'email nom prenom');
+    const groupes = await GroupeClient.find({ _id: { $in: campaign.groupeIds } }).populate('clientIds', selectFields);
     const seen = new Set<string>();
     for (const g of groupes) {
       for (const c of (g as any).clientIds) {
         if (!seen.has(String(c._id))) {
           seen.add(String(c._id));
-          clients.push({ email: c.email, nom: c.nom, prenom: c.prenom });
+          clients.push({ email: c.email, nom: c.nom, prenom: c.prenom, telephone: c.telephone });
         }
       }
     }
   } else if (cibleType === 'TYPE_CLIENT') {
     const filter = campaign.cible === 'TOUS' ? {} : { typeClient: campaign.cible };
-    clients = await Client.find(filter).select('email nom prenom');
+    clients = await Client.find(filter).select(selectFields);
   } else {
     // TOUS
-    clients = await Client.find({}).select('email nom prenom');
+    clients = await Client.find({}).select(selectFields);
+  }
+
+  // Pour les campagnes SMS, ne garder que les clients avec un numéro de téléphone
+  if (campaign.canal === 'SMS') {
+    clients = clients.filter(c => c.telephone && c.telephone.trim().length > 0);
   }
 
   if (clients.length === 0) {
@@ -61,16 +69,22 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const batch = clients.slice(i, i + BATCH);
 
     await Promise.allSettled(batch.map(async (client) => {
-      const personalizedHtml = campaign.contenu
+      const personalizedText = campaign.contenu
         .replace(/\{\{nom\}\}/g, client.nom || '')
         .replace(/\{\{prenom\}\}/g, client.prenom || '')
         .replace(/\{\{email\}\}/g, client.email || '');
 
-      const result = await sendMail({
-        to: client.email,
-        subject: campaign.sujet,
-        html: wrapTemplate(personalizedHtml, campaign.sujet),
-      });
+      let result: { success: boolean; error?: string };
+      if (campaign.canal === 'SMS') {
+        const smsResult = await sendSms({ to: client.telephone ?? '', body: personalizedText });
+        result = { success: smsResult.success, error: smsResult.success ? undefined : (smsResult as any).error ?? 'Échec envoi SMS' };
+      } else {
+        result = await sendMail({
+          to: client.email,
+          subject: campaign.sujet,
+          html: wrapTemplate(personalizedText, campaign.sujet),
+        });
+      }
 
       const log = new (await import('@/models/DeliveryLog')).default({
         campaign: id,
