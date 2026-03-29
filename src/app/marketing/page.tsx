@@ -7,6 +7,7 @@ import {
   FolderOpen, Globe, Eye, MessageSquare, Layers, Tag,
   BarChart2, BookMarked, Calendar, Save, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type CibleType = 'TOUS' | 'TYPE_CLIENT' | 'GROUPES' | 'SELECTIONNES';
@@ -450,7 +451,7 @@ export default function MarketingPage() {
                 <span className="text-sm font-bold text-indigo-700">
                   {estimatedCount} destinataire{Number(estimatedCount) !== 1 ? 's' : ''} estimé{Number(estimatedCount) !== 1 ? 's' : ''}
                 </span>
-                {!clientsLoaded && <span className="text-xs text-slate-400">(chargement…)</span>}
+                {!clientsLoaded && <span className="inline-flex"><LoadingSpinner size="sm" label="" className="!gap-0 [&>p]:hidden" /></span>}
               </div>
 
               {/* Objet */}
@@ -770,10 +771,7 @@ export default function MarketingPage() {
       {activeTab === 'campagnes' && (
         <div className="space-y-4">
           {loadingCampaigns ? (
-            <div className="text-center py-12 text-slate-400">
-              <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              Chargement…
-            </div>
+            <LoadingSpinner className="py-12" label="Chargement..." size="md" />
           ) : campaigns.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
               <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -855,10 +853,7 @@ export default function MarketingPage() {
       {activeTab === 'groupes' && (
         <div className="space-y-4">
           {loadingGroupes ? (
-            <div className="text-center py-12 text-slate-400">
-              <div className="w-7 h-7 border-2 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              Chargement…
-            </div>
+            <LoadingSpinner className="py-12" label="Chargement..." size="md" />
           ) : groupes.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
               <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -969,10 +964,7 @@ export default function MarketingPage() {
                   {analyticsId === c._id && (
                     <div className="border-t border-slate-100 p-5">
                       {loadingAnalytics ? (
-                        <div className="flex items-center gap-2 text-slate-400 py-4 justify-center">
-                          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                          Chargement des analytics…
-                        </div>
+                        <LoadingSpinner className="py-4" label="Chargement des analytics..." size="sm" />
                       ) : analyticsData ? (
                         <div className="space-y-5">
                           {/* KPIs */}

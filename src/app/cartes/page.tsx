@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, CreditCard, Wallet, X, Trash2, ChevronDown, CheckCircle, PauseCircle } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const TYPE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   ZELLE:    { color: 'text-purple-700', bg: 'bg-purple-100', label: 'Zelle',    icon: 'Z' },
@@ -253,8 +254,7 @@ export default function CartesPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                  <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                  Chargement...
+                  <LoadingSpinner label="Chargement..." size="sm" />
                 </td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="px-6 py-16 text-center">
