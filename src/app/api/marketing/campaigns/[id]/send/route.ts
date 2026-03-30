@@ -91,7 +91,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         recipient: clientMap.get(client.email) || null,
         email: client.email,
         status: result.success ? 'SENT' : 'FAILED',
-        errorMessage: result.success ? null : 'Échec d\'envoi SMTP',
+        errorMessage: result.success ? null : (result.error || `Echec d'envoi ${campaign.canal === 'SMS' ? 'SMS' : 'SMTP'}`),
       });
       await log.save();
 
