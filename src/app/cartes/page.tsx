@@ -102,16 +102,16 @@ export default function CartesPage() {
   const stats = TYPES.reduce((acc, t) => { acc[t] = cartes.filter(c => c.type === t).length; return acc; }, {} as Record<string, number>);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* MODALE AJOUT/ÉDITION */}
       {modalMode && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[92vh] flex flex-col">
             <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-8 py-6 flex justify-between items-center">
               <h2 className="text-white font-bold text-xl">{modalMode === 'add' ? 'Nouveau Compte' : 'Modifier le Compte'}</h2>
               <button onClick={() => setModalMode(null)} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
             </div>
-            <div className="p-8 space-y-5">
+            <div className="p-4 sm:p-6 lg:p-8 space-y-5 overflow-y-auto">
               {/* Client */}
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Client *</label>
@@ -121,7 +121,7 @@ export default function CartesPage() {
                 </select>
               </div>
               {/* Type + Devise */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Type *</label>
                   <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 text-sm">
@@ -191,18 +191,18 @@ export default function CartesPage() {
       )}
 
       {/* HEADER */}
-      <header className="flex justify-between items-center mb-8">
+      <header className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Cartes & Comptes</h1>
-          <p className="text-slate-500 mt-1">Gérez les comptes Zelle, CashApp, Wire, Crypto et autres moyens de paiement.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Cartes & Comptes</h1>
+          <p className="text-slate-500 mt-1 text-sm sm:text-base">Gérez les comptes Zelle, CashApp, Wire, Crypto et autres moyens de paiement.</p>
         </div>
-        <button onClick={openAddModal} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center gap-2 transition-all hover:scale-105">
+        <button onClick={openAddModal} className="w-full md:w-auto justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center gap-2 transition-all hover:scale-105">
           <Plus size={20} /> Nouveau Compte
         </button>
       </header>
 
       {/* STATS PAR TYPE */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {TYPES.filter(t => stats[t] > 0 || t === 'ZELLE' || t === 'CASH_APP' || t === 'CRYPTO' || t === 'WIRE').slice(0, 4).map(type => {
           const cfg = TYPE_CONFIG[type];
           return (

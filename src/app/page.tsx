@@ -39,20 +39,20 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* HEADER */}
-      <header className="flex justify-between items-center mb-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Tableau de bord</h1>
-          <p className="text-slate-500 mt-1">Vue d'ensemble de la plateforme NBBC — {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Tableau de bord</h1>
+          <p className="text-slate-500 mt-1 text-sm sm:text-base">Vue d'ensemble de la plateforme NBBC — {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button onClick={exportCSV} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow">
+        <button onClick={exportCSV} className="w-full sm:w-auto justify-center flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow">
           <Download size={18} /> Exporter Clients CSV
         </button>
       </header>
 
       {/* KPI CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         {kpiCards.map((kpi, i) => {
           const Icon = kpi.icon;
           return (
@@ -72,9 +72,9 @@ export default function Dashboard() {
       </div>
 
       {/* GRAPHIQUES LIGNE 1 */}
-      <div className="grid grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
         {/* Évolution mensuelle */}
-        <div className="col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Nouveaux Clients</h2>
           <p className="text-sm text-slate-400 mb-5">Évolution sur les 12 derniers mois</p>
           <ResponsiveContainer width="100%" height={220}>
@@ -95,7 +95,7 @@ export default function Dashboard() {
         </div>
 
         {/* Type de clients */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Types de Clients</h2>
           <p className="text-sm text-slate-400 mb-4">Répartition actuelle</p>
           {clientsByType?.length > 0 ? (
@@ -127,9 +127,9 @@ export default function Dashboard() {
       </div>
 
       {/* GRAPHIQUES LIGNE 2 */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Services utilisés */}
-        <div className="col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Services Utilisés</h2>
           <p className="text-sm text-slate-400 mb-5">Distribution des services parmi tous les clients</p>
           {clientsByService?.length > 0 ? (
@@ -152,7 +152,7 @@ export default function Dashboard() {
         {/* Top Pays + Accès Rapide */}
         <div className="space-y-4">
           {/* Top Pays */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
             <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
               <Globe size={18} className="text-slate-400" /> Top Pays
             </h2>
@@ -175,7 +175,7 @@ export default function Dashboard() {
           </div>
 
           {/* Accès Rapide */}
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 sm:p-6 text-white">
             <h2 className="text-base font-bold mb-4">Accès Rapide</h2>
             <div className="space-y-2">
               {[

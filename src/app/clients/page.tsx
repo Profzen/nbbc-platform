@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers, X } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
@@ -177,13 +178,13 @@ export default function ClientsPage() {
   }, []);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <header className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Gestion des Clients</h1>
-          <p className="text-slate-500 mt-1">Gérez votre portefeuille clients et pilotez la répartition par service, type et pays.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Gestion des Clients</h1>
+          <p className="text-slate-500 mt-1 text-sm sm:text-base">Gérez votre portefeuille clients et pilotez la répartition par service, type et pays.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
           <input
             ref={fileInputRef}
             type="file"
@@ -196,14 +197,14 @@ export default function ClientsPage() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium shadow-sm flex items-center gap-2"
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Upload size={18} />
             Importer CSV
           </button>
           <Link 
             href="/clients/nouveau" 
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto"
           >
             <Plus size={20} />
             Nouveau Client
@@ -225,8 +226,8 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Layers size={18} className="text-blue-600" />
             <h2 className="text-sm font-bold text-slate-700">Distribution par Service</h2>
@@ -266,7 +267,7 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Globe2 size={18} className="text-green-600" />
             <h2 className="text-sm font-bold text-slate-700">Distribution par Pays</h2>
@@ -290,7 +291,7 @@ export default function ClientsPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Building2 size={18} className="text-purple-600" />
             <h2 className="text-sm font-bold text-slate-700">Distribution par Type</h2>
@@ -318,7 +319,7 @@ export default function ClientsPage() {
       {showMappingModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex justify-between items-center">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 sm:p-6 flex justify-between items-center gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Mapping des Colonnes</h2>
                 <p className="text-sm text-slate-500 mt-1">Mappez les colonnes de votre CSV à nos champs</p>
@@ -331,7 +332,7 @@ export default function ClientsPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { key: 'firstName', label: 'Prénom' },
@@ -427,7 +428,7 @@ export default function ClientsPage() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-200">
+        <div className="p-4 sm:p-6 border-b border-slate-200">
           <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2">
             <Search size={18} className="text-slate-400" />
             <input
@@ -459,7 +460,7 @@ export default function ClientsPage() {
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <LoadingSpinner label="Chargement..." size="sm" />
                   </td>
                 </tr>
               ) : (

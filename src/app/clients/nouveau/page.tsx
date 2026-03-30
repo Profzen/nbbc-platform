@@ -51,18 +51,18 @@ export default function NouveauClient() {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <div className="mb-6">
         <Link href="/clients" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-blue-600 mb-4 transition-colors">
           <ArrowLeft size={16} className="mr-1" /> Retour à la liste
         </Link>
-        <h1 className="text-3xl font-bold text-slate-800">Ajouter un Client</h1>
-        <p className="text-slate-500 mt-1">Créez un nouveau profil client dans la base de données NBBC.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Ajouter un Client</h1>
+        <p className="text-slate-500 mt-1 text-sm sm:text-base">Créez un nouveau profil client dans la base de données NBBC.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Section Identité */}
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
             <User className="text-blue-500" size={20} /> Identité & Contact
           </h2>
@@ -87,7 +87,7 @@ export default function NouveauClient() {
         </div>
 
         {/* Section Profil NBBC */}
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
             <Briefcase className="text-blue-500" size={20} /> Profil & Services
           </h2>
@@ -127,11 +127,11 @@ export default function NouveauClient() {
           </div>
         </div>
 
-        <div className="flex justify-end pt-4 pb-12">
+        <div className="flex justify-end pt-4 pb-8 sm:pb-12">
           <button 
             type="submit" 
             disabled={loading}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-transform hover:-translate-y-1 hover:shadow-xl active:translate-y-0 disabled:opacity-70 disabled:transform-none"
+            className="w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-transform hover:-translate-y-1 hover:shadow-xl active:translate-y-0 disabled:opacity-70 disabled:transform-none"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

@@ -131,10 +131,10 @@ export default function NosSitesPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-800">Nos sites</h1>
-        <p className="text-slate-500 mt-1">Gérez les sites de la société et leurs accès public/admin.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Nos sites</h1>
+        <p className="text-slate-500 mt-1 text-sm sm:text-base">Gérez les sites de la société et leurs accès public/admin.</p>
       </header>
 
       {error && (

@@ -202,28 +202,28 @@ export default function SignaturesAdminPage() {
   const hasClientSelection = Boolean(requestForm.clientId || (requestForm.clientNomLibre || clientSearch).trim());
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       
       {/* HEADER */}
-      <header className="flex justify-between items-center mb-6">
+      <header className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-800">E-Signature</h1>
-          <p className="text-slate-500 mt-1">Gérez vos contrats, modèles et demandes de signature électroniques.</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-800">E-Signature</h1>
+          <p className="text-slate-500 mt-1 text-sm sm:text-base">Gérez vos contrats, modèles et demandes de signature électroniques.</p>
         </div>
         
         {activeTab === 'requests' ? (
-          <button onClick={() => { setRequestForm({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '', fichierPdfPublicId: '', fichierPdfResourceType: '', fichierPdfDeliveryType: '', fichierPdfFormat: '' }); setClientSearch(''); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
+          <button onClick={() => { setRequestForm({ clientId: '', clientNomLibre: '', titre: '', typeSource: 'TEMPLATE', templateId: '', fichierPdfUrl: '', fichierPdfPublicId: '', fichierPdfResourceType: '', fichierPdfDeliveryType: '', fichierPdfFormat: '' }); setClientSearch(''); setGeneratedLink(null); setShowRequestModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center justify-center gap-2 w-full md:w-auto">
             <Plus size={18} /> Nouvelle Demande
           </button>
         ) : (
-          <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuTexte: '' }); setShowTemplateModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center gap-2">
+          <button onClick={() => { setTemplateForm({ id: '', nom: '', contenuTexte: '' }); setShowTemplateModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition flex items-center justify-center gap-2 w-full md:w-auto">
             <Plus size={18} /> Nouveau Modèle
           </button>
         )}
       </header>
 
       {/* TABS */}
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b border-slate-200 overflow-x-auto pb-1">
         {TABS.map(tab => {
           const Icon = tab.icon;
           return (
@@ -241,7 +241,8 @@ export default function SignaturesAdminPage() {
           
           {/* TAB : REQUÊTES */}
           {activeTab === 'requests' && (
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm min-w-[760px]">
               <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
                 <tr>
                   <th className="px-6 py-4">Document</th>
@@ -304,11 +305,12 @@ export default function SignaturesAdminPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
 
           {/* TAB : TEMPLATES */}
           {activeTab === 'templates' && (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {templates.map(tpl => (
                 <div key={tpl._id} className="border border-slate-200 rounded-xl p-5 hover:border-indigo-300 transition shadow-sm relative group bg-white">
                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
