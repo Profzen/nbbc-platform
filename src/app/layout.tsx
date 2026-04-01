@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   description: "ERP/CRM pour la gestion des clients et services NBBC",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -34,13 +39,13 @@ export default async function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden`}>
         <AuthProvider>
           {isPublicPage ? (
-            <main className="flex-1 overflow-y-auto h-full">
+            <main className="flex-1 min-w-0 overflow-y-auto h-full">
               {children}
             </main>
           ) : (
-            <div className="flex h-full w-full overflow-hidden relative">
+            <div className="flex h-full w-full min-w-0 overflow-hidden relative">
               <Sidebar />
-              <main className="flex-1 overflow-y-auto h-full pt-16 lg:pt-0">
+              <main className="flex-1 min-w-0 overflow-y-auto h-full pt-16 lg:pt-0">
                 {children}
               </main>
             </div>

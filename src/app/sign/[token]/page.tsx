@@ -182,7 +182,7 @@ export default function SignaturePage() {
             </div>
           </header>
 
-          <main className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[600px] border border-slate-200">
+          <main className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[70vh] sm:h-[600px] border border-slate-200">
             <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-700">{data.titreDocument}</h2>
               {data.typeSource === 'UPLOAD' && (

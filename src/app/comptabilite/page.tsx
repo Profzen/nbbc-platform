@@ -733,7 +733,7 @@ export default function ComptabilitePage() {
   const currentSectionType = activeSection === 'achats' ? 'ACHAT' : activeSection === 'ventes' ? 'VENTE' : activeSection === 'depenses' ? 'DEPENSE' : activeSection === 'dettes' ? 'DETTE' : null;
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-black text-slate-800">{SECTION_META[activeSection].label}</h1>
@@ -850,7 +850,7 @@ export default function ComptabilitePage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                 <Search size={14} className="text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-52 bg-transparent text-sm outline-none" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full sm:w-52 bg-transparent text-sm outline-none" />
               </div>
               <button onClick={deleteSelectedTransactions} disabled={selectedTransactionIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
               <button onClick={() => exportTransactionsPdf(currentSectionType)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
@@ -928,7 +928,7 @@ export default function ComptabilitePage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                 <Search size={14} className="text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-52 bg-transparent text-sm outline-none" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full sm:w-52 bg-transparent text-sm outline-none" />
               </div>
               <button onClick={deleteSelectedDepots} disabled={selectedDepotIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
               <button onClick={exportDepotsPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
@@ -1077,7 +1077,7 @@ export default function ComptabilitePage() {
             <form onSubmit={saveTransaction} className="space-y-4 overflow-y-auto p-6">
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">Type *</label>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:grid-cols-4">
                   {(Object.keys(TX_TYPE_CONFIG) as AccountingTransactionType[]).map((type) => (
                     <button key={type} type="button" onClick={() => setTxForm((prev) => ({ ...prev, type, txCurrency: TX_TYPE_CONFIG[type].defaultCurrency }))} className={`rounded-xl border px-3 py-2 text-xs font-bold ${txForm.type === type ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>{TX_TYPE_CONFIG[type].label}</button>
                   ))}

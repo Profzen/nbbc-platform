@@ -146,7 +146,7 @@ export default function CartesPage() {
                 <input type="text" value={formData.identifiant} onChange={e => setFormData({...formData, identifiant: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 text-sm font-mono" placeholder={formData.type === 'CASH_APP' ? '$exemple' : formData.type === 'ZELLE' ? 'jean@email.com' : '...'} />
               </div>
               {/* Titulaire + Banque */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Titulaire</label>
                   <input type="text" value={formData.titulaire} onChange={e => setFormData({...formData, titulaire: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 text-sm" placeholder="Nom du titulaire" />
@@ -176,7 +176,7 @@ export default function CartesPage() {
       {/* MODALE SUPPRESSION */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-[calc(100vw-2rem)] sm:w-full text-center shadow-2xl">
             <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 size={28} />
             </div>
@@ -220,7 +220,7 @@ export default function CartesPage() {
       {/* BARRE DE RECHERCHE + FILTRE */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 flex-wrap gap-3">
-          <div className="relative w-80">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input type="text" placeholder="Rechercher un client, compte..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white" />
           </div>

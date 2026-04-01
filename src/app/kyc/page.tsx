@@ -221,7 +221,7 @@ export default function KycAdminPage() {
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white focus:border-blue-500 mb-4 resize-none"
                   rows={3}
                 />
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button disabled={actionLoading} onClick={() => handleDecision(selectedReq._id, 'REJETE', rejectNote)} className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-rose-200 text-rose-600 font-bold hover:bg-rose-50 transition-colors disabled:opacity-50">
                     <X size={18} /> Rejeter
                   </button>

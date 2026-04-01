@@ -364,7 +364,7 @@ export default function MarketingPage() {
               {/* Mode ciblage */}
               <div>
                 <label className="label-xs">Mode de ciblage</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     { val: 'TOUS', icon: Globe, label: 'Tous les clients', desc: 'Envoyer à toute la base' },
                     { val: 'TYPE_CLIENT', icon: Tag, label: 'Par type de client', desc: 'Filtre par catégorie' },
@@ -695,7 +695,7 @@ export default function MarketingPage() {
 
       {/* ─── TOAST ───────────────────────────────────────────────────────────── */}
       {sendResult && (
-        <div className={`fixed bottom-6 right-6 z-50 p-5 rounded-2xl shadow-2xl max-w-sm ${sendResult.success ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+        <div className={`fixed bottom-4 left-4 right-4 sm:bottom-6 sm:left-auto sm:right-6 z-50 p-5 rounded-2xl shadow-2xl max-w-sm sm:max-w-md ${sendResult.success ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
           <div className="flex justify-between items-start mb-2">
             <h4 className={`font-bold ${sendResult.success ? 'text-emerald-800' : 'text-rose-800'}`}>
               {sendResult.success ? '✅ Campagne envoyée !' : '❌ Erreur d\'envoi'}
@@ -728,7 +728,7 @@ export default function MarketingPage() {
       </header>
 
       {/* ─── KPI ─────────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-7">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
         {[
           { label: 'Campagnes', value: campaigns.length, icon: Megaphone, color: 'from-indigo-500 to-purple-600' },
           { label: 'Envoyées', value: campaigns.filter(c => c.statut === 'ENVOYE').length, icon: CheckCircle, color: 'from-emerald-500 to-teal-600' },
@@ -751,7 +751,7 @@ export default function MarketingPage() {
       </div>
 
       {/* ─── ONGLETS ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-xl overflow-x-auto whitespace-nowrap w-full sm:w-fit">
         {([
           { id: 'campagnes', label: 'Campagnes', icon: Megaphone },
           { id: 'groupes', label: 'Groupes de clients', icon: Layers },
@@ -760,7 +760,7 @@ export default function MarketingPage() {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`shrink-0 flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <Icon size={16} /> {t.label}
             </button>
           );
@@ -968,7 +968,7 @@ export default function MarketingPage() {
                       ) : analyticsData ? (
                         <div className="space-y-5">
                           {/* KPIs */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             {[
                               { label: 'Destinataires', value: analyticsData.total, color: 'text-slate-700', bg: 'bg-slate-50' },
                               { label: 'Envoyés', value: analyticsData.sent, color: 'text-emerald-700', bg: 'bg-emerald-50' },

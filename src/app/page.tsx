@@ -74,7 +74,7 @@ export default function Dashboard() {
       {/* GRAPHIQUES LIGNE 1 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
         {/* Évolution mensuelle */}
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+        <div className="min-w-0 overflow-hidden xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Nouveaux Clients</h2>
           <p className="text-sm text-slate-400 mb-5">Évolution sur les 12 derniers mois</p>
           <ResponsiveContainer width="100%" height={220}>
@@ -95,7 +95,7 @@ export default function Dashboard() {
         </div>
 
         {/* Type de clients */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+        <div className="min-w-0 overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Types de Clients</h2>
           <p className="text-sm text-slate-400 mb-4">Répartition actuelle</p>
           {clientsByType?.length > 0 ? (
@@ -129,7 +129,7 @@ export default function Dashboard() {
       {/* GRAPHIQUES LIGNE 2 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Services utilisés */}
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+        <div className="min-w-0 overflow-hidden xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Services Utilisés</h2>
           <p className="text-sm text-slate-400 mb-5">Distribution des services parmi tous les clients</p>
           {clientsByService?.length > 0 ? (

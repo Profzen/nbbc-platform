@@ -242,7 +242,7 @@ export default function SignaturesAdminPage() {
           {/* TAB : REQUÊTES */}
           {activeTab === 'requests' && (
             <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[760px]">
+            <table className="w-full text-left text-sm min-w-[760px] whitespace-nowrap">
               <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
                 <tr>
                   <th className="px-6 py-4">Document</th>
@@ -387,7 +387,7 @@ export default function SignaturesAdminPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Source du document *</label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button onClick={() => setRequestForm({...requestForm, typeSource: 'TEMPLATE'})} className={`p-4 border-2 rounded-xl flex flex-col items-center gap-2 ${requestForm.typeSource === 'TEMPLATE' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                         <Code size={24} /> <span className="font-bold text-sm">Généré via Modèle</span>
                       </button>
