@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from 'pdfjs-dist';
 
 // Required in production: without this, PDF.js cannot start its worker and fails to render.
@@ -8,17 +8,15 @@ GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/bu
 
 interface PdfViewerProps {
   url: string;
-  onPageVisible?: (pageNumber: number) => void;
+  signingMode?: boolean;
+  onPageClick?: (payload: { pageNumber: number; xRatio: number; yRatio: number }) => void;
 }
 
-export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
-  const [numPages, setNumPages] = useState(0);
+export default function PdfViewer({ url, signingMode = false, onPageClick }: PdfViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
-  const [visiblePageNumber, setVisiblePageNumber] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
 
   // Load PDF and render all pages
   useEffect(() => {
@@ -31,7 +29,6 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
         const pdf = await getDocument(url).promise;
         if (cancelled) return;
         const totalPages = pdf.numPages;
-        setNumPages(totalPages);
 
         const pageImages: string[] = [];
         for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
@@ -71,38 +68,16 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
     };
   }, [url]);
 
-  // Set up intersection observer to track visible page
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const onPageContainerClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!signingMode || !onPageClick) return;
 
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const pageNum = parseInt(entry.target.getAttribute('data-page-num') || '1', 10);
-            setVisiblePageNumber(pageNum);
-            if (onPageVisible) {
-              onPageVisible(pageNum);
-            }
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
+    const rect = event.currentTarget.getBoundingClientRect();
+    const xRatio = Math.min(0.95, Math.max(0.05, (event.clientX - rect.left) / rect.width));
+    const yRatio = Math.min(0.95, Math.max(0.05, (event.clientY - rect.top) / rect.height));
+    const pageNumber = Number(event.currentTarget.dataset.pageNum || 1);
 
-    const pageElements = containerRef.current.querySelectorAll('[data-page-num]');
-    pageElements.forEach((el) => {
-      if (observerRef.current) {
-        observerRef.current.observe(el);
-      }
-    });
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [pages, onPageVisible]);
+    onPageClick({ pageNumber, xRatio, yRatio });
+  };
 
   if (loading) {
     return (
@@ -132,7 +107,8 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
         <div
           key={index}
           data-page-num={index + 1}
-          className="relative bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden"
+          onClick={onPageContainerClick}
+          className={`relative bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden ${signingMode ? 'cursor-crosshair ring-2 ring-indigo-300/70' : ''}`}
         >
           <img
             src={pageImage}
