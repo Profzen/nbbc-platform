@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getDocument } from 'pdfjs-dist';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from 'pdfjs-dist';
+
+// Required in production: without this, PDF.js cannot start its worker and fails to render.
+GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
 
 interface PdfViewerProps {
   url: string;
@@ -20,11 +22,14 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
 
   // Load PDF and render all pages
   useEffect(() => {
+    let cancelled = false;
+
     const loadPdf = async () => {
       try {
         setLoading(true);
         setError(null);
         const pdf = await getDocument(url).promise;
+        if (cancelled) return;
         const totalPages = pdf.numPages;
         setNumPages(totalPages);
 
@@ -48,9 +53,11 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
           pageImages.push(canvas.toDataURL('image/png'));
         }
 
+        if (cancelled) return;
         setPages(pageImages);
         setLoading(false);
       } catch (err) {
+        if (cancelled) return;
         console.error('Error loading PDF:', err);
         setError('Erreur de chargement du PDF');
         setLoading(false);
@@ -58,6 +65,10 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
     };
 
     loadPdf();
+
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   // Set up intersection observer to track visible page
