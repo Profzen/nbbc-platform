@@ -21,11 +21,12 @@ export default function ParametresPage() {
 
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'AGENT',
+    role: '',
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -73,7 +74,8 @@ export default function ParametresPage() {
       }
 
       setMessage('Compte agent créé avec succès.');
-      setFormData({ name: '', email: '', password: '', role: 'AGENT' });
+      setFormData({ name: '', email: '', password: '', role: '' });
+      setShowCreateForm(false);
       fetchUsers();
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la création du compte.');
@@ -122,63 +124,93 @@ export default function ParametresPage() {
               <h2 className="text-lg font-bold text-slate-800">Créer un compte agent</h2>
             </div>
 
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nom</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mot de passe</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Rôle</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                >
-                  <option value="AGENT">AGENT</option>
-                </select>
-              </div>
-
-              {error && <p className="text-sm text-rose-600">{error}</p>}
-              {message && <p className="text-sm text-emerald-600">{message}</p>}
-
+            {!showCreateForm ? (
               <button
-                type="submit"
-                disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => {
+                  setFormData({ name: '', email: '', password: '', role: '' });
+                  setError('');
+                  setMessage('');
+                  setShowCreateForm(true);
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl"
               >
-                {saving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Création en cours...</> : 'Créer le compte'}
+                Créer un utilisateur
               </button>
-            </form>
+            ) : (
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nom</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mot de passe</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={formData.password}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Rôle</label>
+                  <select
+                    required
+                    value={formData.role}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="">Sélectionner un rôle</option>
+                    <option value="AGENT">AGENT</option>
+                  </select>
+                </div>
+
+                {error && <p className="text-sm text-rose-600">{error}</p>}
+                {message && <p className="text-sm text-emerald-600">{message}</p>}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateForm(false);
+                      setFormData({ name: '', email: '', password: '', role: '' });
+                      setError('');
+                    }}
+                    className="w-full border border-slate-300 text-slate-700 font-semibold py-2.5 rounded-xl hover:bg-slate-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  >
+                    {saving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Création en cours...</> : 'Créer le compte'}
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
 
           <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
