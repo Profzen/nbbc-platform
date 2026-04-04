@@ -131,7 +131,7 @@ export default function SignaturePage() {
           placement: {
             xRatio: signaturePlacement.xRatio,
             yRatio: signaturePlacement.yRatio,
-            widthRatio: 0.26,
+            widthRatio: 0.18,
             pageIndex: signaturePlacement.pageNum - 1,
           },
         })
@@ -295,7 +295,7 @@ export default function SignaturePage() {
                     xRatio: signaturePlacement.xRatio,
                     yRatio: signaturePlacement.yRatio,
                     imageUrl: signatureDataUrl,
-                    widthPercent: 25,
+                    widthPercent: 18,
                   } : undefined}
                 />
               )}

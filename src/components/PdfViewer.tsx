@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from 'pdfjs-dist';
-
-// Required in production: without this, PDF.js cannot start its worker and fails to render.
-GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
+import { useEffect, useRef, useState } from 'react';
+import { getDocument } from 'pdfjs-dist';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
 export interface SignatureOverlay {
   pageNum: number;
@@ -22,38 +20,50 @@ interface PdfViewerProps {
   signatureOverlay?: SignatureOverlay;
 }
 
+type PageMeta = {
+  pageNum: number;
+  aspectRatio: number;
+};
+
 export default function PdfViewer({ url, onPageClick, signatureOverlay }: PdfViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pages, setPages] = useState<string[]>([]);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const [pages, setPages] = useState<PageMeta[]>([]);
+  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
 
   useEffect(() => {
     let cancelled = false;
+    let loadingTask: ReturnType<typeof getDocument> | null = null;
 
     const loadPdf = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const pdf = await getDocument(url).promise;
+        loadingTask = getDocument({
+          url,
+          disableWorker: true,
+          useWorkerFetch: false,
+        } as any);
+
+        const pdf = await loadingTask.promise;
         if (cancelled) return;
 
-        const pageImages: string[] = [];
+        const pageMetas: PageMeta[] = [];
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           if (cancelled) break;
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 2 });
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          if (!context) continue;
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          await page.render({ canvasContext: context, canvas, viewport }).promise;
-          pageImages.push(canvas.toDataURL('image/png'));
+          const viewport = page.getViewport({ scale: 1 });
+          pageMetas.push({
+            pageNum,
+            aspectRatio: viewport.width / viewport.height,
+          });
         }
 
         if (cancelled) return;
-        setPages(pageImages);
+        setPdfDocument(pdf);
+        setPages(pageMetas);
         setLoading(false);
       } catch (err) {
         if (cancelled) return;
@@ -64,8 +74,59 @@ export default function PdfViewer({ url, onPageClick, signatureOverlay }: PdfVie
     };
 
     loadPdf();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      loadingTask?.destroy();
+    };
   }, [url]);
+
+  useEffect(() => {
+    if (!pdfDocument || pages.length === 0) return;
+
+    let cancelled = false;
+    const renderTasks: RenderTask[] = [];
+
+    const renderPages = async () => {
+      try {
+        for (const pageMeta of pages) {
+          if (cancelled) return;
+
+          const canvas = canvasRefs.current[pageMeta.pageNum - 1];
+          if (!canvas) continue;
+
+          const page = await pdfDocument.getPage(pageMeta.pageNum);
+          const viewport = page.getViewport({ scale: 2 });
+          const context = canvas.getContext('2d', { alpha: false });
+          if (!context) continue;
+
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+
+          const renderTask = page.render({
+            canvasContext: context,
+            canvas,
+            viewport,
+          });
+          renderTasks.push(renderTask);
+          await renderTask.promise;
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Error rendering PDF pages:', err);
+        setError('Erreur de rendu du PDF');
+      }
+    };
+
+    renderPages();
+
+    return () => {
+      cancelled = true;
+      renderTasks.forEach((task) => task.cancel());
+    };
+  }, [pdfDocument, pages]);
 
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
     if (!onPageClick) return;
@@ -99,23 +160,24 @@ export default function PdfViewer({ url, onPageClick, signatureOverlay }: PdfVie
 
   return (
     <div className="relative w-full h-full overflow-y-auto bg-slate-100 flex flex-col items-center gap-4 p-4">
-      {pages.map((pageImage, index) => (
+      {pages.map((page) => (
         <div
-          key={index}
-          data-page-num={index + 1}
+          key={page.pageNum}
+          data-page-num={page.pageNum}
           className={`relative bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden w-full max-w-2xl ${onPageClick ? 'cursor-crosshair' : ''}`}
-          onClick={(e) => handlePageClick(e, index + 1)}
+          style={{ aspectRatio: `${page.aspectRatio}` }}
+          onClick={(e) => handlePageClick(e, page.pageNum)}
         >
-          <img
-            src={pageImage}
-            alt={`Page ${index + 1}`}
-            className="w-full h-auto block"
-            draggable={false}
+          <canvas
+            ref={(element) => {
+              canvasRefs.current[page.pageNum - 1] = element;
+            }}
+            className="block w-full h-auto bg-white"
           />
           <div className="absolute bottom-2 right-2 text-xs bg-slate-900/70 text-white px-2 py-1 rounded pointer-events-none">
-            Page {index + 1}
+            Page {page.pageNum}
           </div>
-          {signatureOverlay?.pageNum === index + 1 && (
+          {signatureOverlay?.pageNum === page.pageNum && (
             <img
               src={signatureOverlay.imageUrl}
               alt="Signature"
