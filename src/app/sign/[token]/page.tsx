@@ -21,6 +21,7 @@ export default function SignaturePage() {
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [placementMode, setPlacementMode] = useState(false);
   const [draggingSignature, setDraggingSignature] = useState(false);
+  const [selectedPage, setSelectedPage] = useState(1);
   const [placement, setPlacement] = useState({ xRatio: 0.8, yRatio: 0.88, widthRatio: 0.26 });
   /** Pixel position of the chosen placement inside the document viewport (for visual feedback) */
   const [placementPixels, setPlacementPixels] = useState<{ x: number; y: number } | null>(null);
@@ -79,7 +80,10 @@ export default function SignaturePage() {
     try {
       const res = await fetch(`/api/signatures/${token}`);
       const json = await readJsonSafely(res, 'Réponse invalide du serveur.');
-      if (json.success) setData(json.data);
+      if (json.success) {
+        setData(json.data);
+        setSelectedPage(1);
+      }
       else setError(json.error);
     } catch (e: any) {
       setError('Erreur de connexion.');
@@ -244,7 +248,10 @@ export default function SignaturePage() {
         body: JSON.stringify({
           signatureImageUrl: uploadData.secureUrl,
           signatureImagePublicId: uploadData.publicId,
-          placement,
+          placement: {
+            ...placement,
+            pageIndex: data?.typeSource === 'UPLOAD' ? Math.max(0, selectedPage - 1) : undefined,
+          },
         })
       });
 
@@ -397,6 +404,22 @@ export default function SignaturePage() {
                       <MapPin size={15} />
                       {step2Done ? "Changer l'emplacement" : 'Placer la signature'}
                     </button>
+                  )}
+                  {data.typeSource === 'UPLOAD' && (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <label htmlFor="signature-page" className="font-semibold">Page</label>
+                      <input
+                        id="signature-page"
+                        type="number"
+                        min={1}
+                        value={selectedPage}
+                        onChange={(event) => {
+                          const rawValue = Number(event.target.value || 1);
+                          setSelectedPage(Number.isFinite(rawValue) ? Math.max(1, Math.floor(rawValue)) : 1);
+                        }}
+                        className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
+                    </div>
                   )}
                   {data.typeSource === 'UPLOAD' && (
                     <button

@@ -9,6 +9,7 @@ type Placement = {
   xRatio?: number;
   yRatio?: number;
   widthRatio?: number;
+  pageIndex?: number;
 };
 
 type ParsedCloudinaryUrl = {
@@ -222,7 +223,13 @@ async function buildSignedPdf(params: {
   placement: Placement;
 }) {
   const pdfDoc = await PDFDocument.load(params.sourcePdfBuffer);
-  const targetPage = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
+  const pages = pdfDoc.getPages();
+  const pageCount = pages.length;
+  const requestedPageIndex = Number.isFinite(Number(params.placement.pageIndex))
+    ? Number(params.placement.pageIndex)
+    : pageCount - 1;
+  const safePageIndex = Math.min(pageCount - 1, Math.max(0, Math.floor(requestedPageIndex)));
+  const targetPage = pages[safePageIndex];
   const pageWidth = targetPage.getWidth();
   const pageHeight = targetPage.getHeight();
 
