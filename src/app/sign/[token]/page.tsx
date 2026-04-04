@@ -17,9 +17,10 @@ export default function SignaturePage() {
   const [success, setSuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [placementMode, setPlacementMode] = useState(false);
   const [placement, setPlacement] = useState({ xRatio: 0.8, yRatio: 0.88, widthRatio: 0.26 });
-  const [signedDocumentUrl, setSignedDocumentUrl] = useState<string | null>(null);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const documentAreaRef = useRef<HTMLDivElement | null>(null);
   const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
@@ -66,22 +67,30 @@ export default function SignaturePage() {
   const clearSignature = () => {
     sigCanvas.current?.clear();
     setSignaturePreviewUrl(null);
+    setSignatureDataUrl(null);
+    setPlacementMode(false);
   };
 
-  const prepareSignaturePreview = async () => {
+  const saveSignatureFromPad = () => {
     if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
-      setActionError('Veuillez dessiner votre signature avant de la placer.');
-      return false;
+      setActionError('Veuillez dessiner votre signature avant de continuer.');
+      return;
     }
 
+    const dataUrl = sigCanvas.current.getCanvas().toDataURL('image/png');
+    setSignatureDataUrl(dataUrl);
+    setSignaturePreviewUrl(dataUrl);
     setActionError(null);
-    setSignaturePreviewUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
-    return true;
+    setShowSignatureModal(false);
   };
 
-  const startPlacement = async () => {
-    const ok = await prepareSignaturePreview();
-    if (!ok) return;
+  const startPlacement = () => {
+    if (!signatureDataUrl) {
+      setActionError('Dessinez d’abord votre signature.');
+      setShowSignatureModal(true);
+      return;
+    }
+    setActionError(null);
     setPlacementMode(true);
   };
 
@@ -133,7 +142,7 @@ export default function SignaturePage() {
   };
 
   const submitSignature = async () => {
-    if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
+    if (!signatureDataUrl) {
       setActionError('Veuillez dessiner votre signature avant de confirmer.');
       return;
     }
@@ -141,9 +150,6 @@ export default function SignaturePage() {
     setActionError(null);
     setSubmitting(true);
     try {
-      // 1. Convertir le canvas en image base64
-      const signatureDataUrl = sigCanvas.current.getCanvas().toDataURL('image/png');
-
       // 2. Convertir le dataURL en Blob réel (nécessaire pour Cloudinary)
       const blob = await (await fetch(signatureDataUrl)).blob();
       const file = new File([blob], 'signature.png', { type: 'image/png' });
@@ -165,9 +171,6 @@ export default function SignaturePage() {
 
       const json = await readJsonSafely(res, 'Réponse invalide lors de la validation de signature.');
       if (json.success) {
-        if (json.data?.signedDocumentUrl) {
-          setSignedDocumentUrl(json.data.signedDocumentUrl);
-        }
         setSuccess(true);
       }
       else setActionError(json.error || "Erreur lors de la validation finale.");
@@ -210,9 +213,9 @@ export default function SignaturePage() {
             </div>
             <h1 className="text-2xl font-black text-slate-800 mb-3">Merci, {recipientDisplayName} !</h1>
             <p className="text-slate-500 mb-6">Votre signature a bien été enregistrée et transmise à nos équipes sécurisées.</p>
-            {signedDocumentUrl && (
+            {documentProxyUrl && (
               <a
-                href={signedDocumentUrl}
+                href={`${documentProxyUrl}?download=1`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100"
@@ -240,6 +243,13 @@ export default function SignaturePage() {
             <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-700">{data.titreDocument}</h2>
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSignatureModal(true)}
+                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800"
+                >
+                  <PenTool size={16} /> {signatureDataUrl ? 'Modifier la signature' : 'Dessiner la signature'}
+                </button>
                 <button
                   type="button"
                   onClick={startPlacement}
@@ -289,40 +299,21 @@ export default function SignaturePage() {
             </div>
           </main>
 
-          <section className="bg-white rounded-2xl p-6 shadow-xl border border-slate-200">
-            <div className="mb-4 flex items-center gap-2 text-slate-800">
-              <PenTool size={20} className="text-indigo-600" />
-              <h3 className="font-bold text-lg">Votre signature</h3>
-            </div>
-
+          <section className="bg-white rounded-2xl p-4 sm:p-5 shadow-xl border border-slate-200">
             {actionError && (
-              <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {actionError}
               </div>
             )}
-            
-            <div className="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 relative overflow-hidden group">
-              <SignatureCanvas 
-                ref={sigCanvas}
-                penColor="#1e293b"
-                canvasProps={{ className: 'w-full h-48 cursor-crosshair' }}
-              />
-              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={clearSignature} className="bg-white text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-slate-200 hover:text-rose-500">
-                  Effacer
-                </button>
-              </div>
-            </div>
-            
-            <p className="text-xs text-slate-400 mt-3 text-center">
-              1) Dessinez votre signature ici. 2) Cliquez sur "Placer la signature" puis cliquez dans le document.
-            </p>
 
-            <div className="mt-6 flex justify-end">
-              <button 
-                onClick={submitSignature} 
-                disabled={submitting}
-                className="w-full md:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 flex justify-center items-center"
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <p className="text-xs sm:text-sm text-slate-500">
+                Flux: dessiner la signature, cliquer "Placer la signature", puis cliquer dans le document à l’endroit voulu.
+              </p>
+              <button
+                onClick={submitSignature}
+                disabled={submitting || !signatureDataUrl}
+                className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 flex justify-center items-center"
               >
                 {submitting ? (
                   <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div> Traitement...</>
@@ -330,6 +321,34 @@ export default function SignaturePage() {
               </button>
             </div>
           </section>
+
+          {showSignatureModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800">Dessinez votre signature</h3>
+                  <button onClick={() => setShowSignatureModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 relative overflow-hidden">
+                    <SignatureCanvas
+                      ref={sigCanvas}
+                      penColor="#1e293b"
+                      canvasProps={{ className: 'w-full h-48 cursor-crosshair' }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={clearSignature} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50">
+                      Effacer
+                    </button>
+                    <button onClick={saveSignatureFromPad} className="ml-auto px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+                      Utiliser cette signature
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       )}

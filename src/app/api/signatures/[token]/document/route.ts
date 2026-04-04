@@ -138,7 +138,8 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
     const effectiveDeliveryType = signatureRequest.signedDocumentUrl ? 'upload' : signatureRequest.fichierPdfDeliveryType;
     const effectiveFormat = signatureRequest.signedDocumentUrl ? 'pdf' : signatureRequest.fichierPdfFormat;
 
-    if (signatureRequest.typeSource !== 'UPLOAD' || !effectivePdfUrl) {
+    const hasSignedPdf = Boolean(signatureRequest.signedDocumentUrl);
+    if (!effectivePdfUrl || (!hasSignedPdf && signatureRequest.typeSource !== 'UPLOAD')) {
       return NextResponse.json({ success: false, error: 'Aucun document PDF disponible pour cette demande.' }, { status: 400 });
     }
 
