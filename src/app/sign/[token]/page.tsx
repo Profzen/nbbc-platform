@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type MouseEvent } from 'react';
 import { useParams } from 'next/navigation';
 import SignatureCanvas from 'react-signature-canvas';
-import { PenTool, CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
+import { PenTool, CheckCircle, AlertTriangle, FileText, Download, MapPin } from 'lucide-react';
 import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
@@ -21,6 +21,10 @@ export default function SignaturePage() {
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [placementMode, setPlacementMode] = useState(false);
   const [placement, setPlacement] = useState({ xRatio: 0.8, yRatio: 0.88, widthRatio: 0.26 });
+  /** Pixel position of the chosen placement inside the document viewport (for visual feedback) */
+  const [placementPixels, setPlacementPixels] = useState<{ x: number; y: number } | null>(null);
+  /** Bounding rect of the document area at the moment placement mode was started */
+  const [docAreaRect, setDocAreaRect] = useState<DOMRect | null>(null);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const documentAreaRef = useRef<HTMLDivElement | null>(null);
   const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
@@ -69,6 +73,7 @@ export default function SignaturePage() {
     setSignaturePreviewUrl(null);
     setSignatureDataUrl(null);
     setPlacementMode(false);
+    setPlacementPixels(null);
   };
 
   const saveSignatureFromPad = () => {
@@ -82,30 +87,43 @@ export default function SignaturePage() {
     setSignaturePreviewUrl(dataUrl);
     setActionError(null);
     setShowSignatureModal(false);
+    // Auto-start placement mode — capture rect after modal close animation
+    setTimeout(() => {
+      if (documentAreaRef.current) {
+        setDocAreaRect(documentAreaRef.current.getBoundingClientRect());
+      }
+      setPlacementPixels(null);
+      setPlacementMode(true);
+    }, 120);
   };
 
   const startPlacement = () => {
     if (!signatureDataUrl) {
-      setActionError('Dessinez d’abord votre signature.');
+      setActionError("Dessinez d'abord votre signature.");
       setShowSignatureModal(true);
       return;
     }
+    if (documentAreaRef.current) {
+      setDocAreaRect(documentAreaRef.current.getBoundingClientRect());
+    }
     setActionError(null);
+    setPlacementPixels(null);
     setPlacementMode(true);
   };
 
-  const onDocumentClickForPlacement = (event: MouseEvent<HTMLDivElement>) => {
-    if (!placementMode || !documentAreaRef.current) return;
-
-    const rect = documentAreaRef.current.getBoundingClientRect();
-    const xRatio = (event.clientX - rect.left) / rect.width;
-    const yRatio = (event.clientY - rect.top) / rect.height;
-
-    setPlacement({
-      xRatio: Math.min(0.95, Math.max(0.05, xRatio)),
-      yRatio: Math.min(0.95, Math.max(0.05, yRatio)),
-      widthRatio: placement.widthRatio,
-    });
+  /**
+   * Called when the user clicks the fixed placement overlay.
+   * This overlay sits on top of the iframe too, unlike the outer div's
+   * click handler which the iframe blocks (cross-origin pointer events).
+   */
+  const onPlacementOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!docAreaRect) return;
+    const x = event.clientX - docAreaRect.left;
+    const y = event.clientY - docAreaRect.top;
+    const xRatio = Math.min(0.95, Math.max(0.05, x / docAreaRect.width));
+    const yRatio = Math.min(0.95, Math.max(0.05, y / docAreaRect.height));
+    setPlacementPixels({ x, y });
+    setPlacement({ xRatio, yRatio, widthRatio: placement.widthRatio });
     setPlacementMode(false);
   };
 
@@ -183,6 +201,10 @@ export default function SignaturePage() {
     }
   };
 
+  // Step state helpers
+  const step1Done = !!signatureDataUrl;
+  const step2Done = !!placementPixels;
+
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <LoadingSpinner size="lg" label="Chargement sécurisé..." />
@@ -205,6 +227,54 @@ export default function SignaturePage() {
 
   return (
     <div className="min-h-screen bg-slate-100">
+      {/* Fixed placement overlay — covers entire doc area viewport including iframe
+          (iframes swallow pointer events; this overlay sits on top fixed) */}
+      {placementMode && docAreaRect && (
+        <div
+          className="fixed z-40 cursor-crosshair"
+          style={{
+            left: `${docAreaRect.left}px`,
+            top: `${docAreaRect.top}px`,
+            width: `${docAreaRect.width}px`,
+            height: `${docAreaRect.height}px`,
+            background: 'rgba(99, 102, 241, 0.10)',
+          }}
+          onClick={onPlacementOverlayClick}
+        >
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="bg-indigo-900/85 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-2xl flex items-center gap-2">
+              <MapPin size={16} className="shrink-0" />
+              Cliquez ici pour placer votre signature
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signature preview pinned at exact click position (fixed, over document) */}
+      {placementPixels && docAreaRect && signaturePreviewUrl && !placementMode && (
+        <div
+          className="fixed z-30 pointer-events-none"
+          style={{
+            left: `${docAreaRect.left + placementPixels.x}px`,
+            top: `${docAreaRect.top + placementPixels.y}px`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <img
+            src={signaturePreviewUrl}
+            alt="Aperçu signature"
+            className="rounded-lg border-2 border-indigo-400 bg-white/95 shadow-2xl"
+            style={{ width: `${Math.round(docAreaRect.width * placement.widthRatio)}px` }}
+          />
+          <div className="text-center mt-1">
+            <span className="text-[11px] bg-indigo-600/90 text-white px-2 py-0.5 rounded-full">
+              Emplacement de signature
+            </span>
+          </div>
+        </div>
+      )}
+
+
       {success ? (
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-10 shadow-2xl text-center border-t-4 border-t-emerald-500">
@@ -229,51 +299,84 @@ export default function SignaturePage() {
       ) : (
         <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
           
-          <header className="bg-white rounded-2xl p-6 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center shrink-0">
-              <FileText size={24} />
+          <header className="bg-white rounded-2xl p-5 shadow-sm flex items-center gap-4">
+            <div className="w-11 h-11 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center shrink-0">
+              <FileText size={22} />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-800">Action requise : Signature</h1>
-              <p className="text-slate-500 text-sm">Veuillez lire le document ci-dessous et apposer votre signature.</p>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-slate-800">Action requise : Signature</h1>
+              <p className="text-slate-500 text-sm">Veuillez lire le document et apposer votre signature.</p>
             </div>
           </header>
 
           <main className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[78vh] sm:h-[740px] border border-slate-200">
-            <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
-              <h2 className="font-bold text-slate-700">{data.titreDocument}</h2>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowSignatureModal(true)}
-                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800"
-                >
-                  <PenTool size={16} /> {signatureDataUrl ? 'Modifier la signature' : 'Dessiner la signature'}
-                </button>
-                <button
-                  type="button"
-                  onClick={startPlacement}
-                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800"
-                >
-                  <PenTool size={16} /> {placementMode ? 'Cliquez dans le document...' : 'Placer la signature'}
-                </button>
-                {data.typeSource === 'UPLOAD' && (
+            <div className="bg-slate-50 border-b border-slate-200 px-4 md:px-6 py-3 shrink-0 space-y-2.5">
+              {/* Step progress */}
+              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+                <div className={`flex items-center gap-1 font-semibold ${step1Done ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 ${step1Done ? 'bg-emerald-500' : 'bg-indigo-500'}`}>
+                    {step1Done ? '✓' : '1'}
+                  </span>
+                  <span className="hidden sm:inline">Dessiner la signature</span>
+                  <span className="sm:hidden">Signature</span>
+                </div>
+                <span className="text-slate-300 mx-0.5">→</span>
+                <div className={`flex items-center gap-1 font-semibold ${step2Done ? 'text-emerald-600' : step1Done ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 ${step2Done ? 'bg-emerald-500' : step1Done ? 'bg-indigo-500' : 'bg-slate-300'}`}>
+                    {step2Done ? '✓' : '2'}
+                  </span>
+                  <span className="hidden sm:inline">Placer sur le document</span>
+                  <span className="sm:hidden">Placer</span>
+                </div>
+                <span className="text-slate-300 mx-0.5">→</span>
+                <div className={`flex items-center gap-1 font-semibold ${step1Done && step2Done ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 ${step1Done && step2Done ? 'bg-indigo-500' : 'bg-slate-300'}`}>
+                    3
+                  </span>
+                  <span className="hidden sm:inline">Confirmer</span>
+                  <span className="sm:hidden">OK</span>
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-semibold text-slate-700 text-sm truncate">{data.titreDocument}</span>
+                <div className="flex items-center gap-3 shrink-0">
                   <button
                     type="button"
-                    onClick={downloadDocument}
-                    disabled={downloading}
-                    className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800 disabled:opacity-60"
+                    onClick={() => setShowSignatureModal(true)}
+                    className={`text-sm font-bold flex items-center gap-1.5 ${step1Done ? 'text-emerald-600 hover:text-emerald-800' : 'text-indigo-600 hover:text-indigo-800'}`}
                   >
-                    <Download size={16} /> {downloading ? 'Téléchargement...' : 'Télécharger'}
+                    <PenTool size={15} />
+                    {step1Done ? 'Modifier la signature' : 'Dessiner la signature'}
                   </button>
-                )}
+                  {step1Done && (
+                    <button
+                      type="button"
+                      onClick={startPlacement}
+                      className={`text-sm font-bold flex items-center gap-1.5 ${step2Done ? 'text-emerald-600 hover:text-emerald-800' : 'text-indigo-600 hover:text-indigo-800'}`}
+                    >
+                      <MapPin size={15} />
+                      {step2Done ? "Changer l'emplacement" : 'Placer la signature'}
+                    </button>
+                  )}
+                  {data.typeSource === 'UPLOAD' && (
+                    <button
+                      type="button"
+                      onClick={downloadDocument}
+                      disabled={downloading}
+                      className="text-sm font-bold text-slate-500 flex items-center gap-1.5 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      <Download size={15} />
+                      {downloading ? 'Chargement...' : 'Télécharger'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            
+
             <div
               ref={documentAreaRef}
-              className={`relative flex-1 overflow-y-auto bg-slate-100 p-2 md:p-6 ${placementMode ? 'cursor-crosshair' : ''}`}
-              onClick={onDocumentClickForPlacement}
+              className="relative flex-1 overflow-y-auto bg-slate-100 p-2 md:p-6"
             >
               <div className="bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 p-6 md:p-12">
                 {data.typeSource === 'TEMPLATE' ? (
@@ -282,20 +385,6 @@ export default function SignaturePage() {
                   <iframe src={documentProxyUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
                 )}
               </div>
-
-              {signaturePreviewUrl && (
-                <img
-                  src={signaturePreviewUrl}
-                  alt="Aperçu signature"
-                  className="pointer-events-none absolute z-20 rounded border border-indigo-300 bg-white/95 shadow-xl"
-                  style={{
-                    width: `${placement.widthRatio * 100}%`,
-                    left: `${placement.xRatio * 100}%`,
-                    top: `${placement.yRatio * 100}%`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                />
-              )}
             </div>
           </main>
 
@@ -307,12 +396,23 @@ export default function SignaturePage() {
             )}
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <p className="text-xs sm:text-sm text-slate-500">
-                Flux: dessiner la signature, cliquer "Placer la signature", puis cliquer dans le document à l’endroit voulu.
-              </p>
+              {step2Done ? (
+                <p className="text-xs sm:text-sm text-emerald-600 font-medium flex items-center gap-1.5">
+                  <MapPin size={14} className="shrink-0" />
+                  Emplacement choisi. Confirmez quand vous êtes prêt.
+                </p>
+              ) : step1Done ? (
+                <p className="text-xs sm:text-sm text-indigo-600 font-medium">
+                  Cliquez sur "Placer la signature" puis touchez le document à l'endroit voulu.
+                </p>
+              ) : (
+                <p className="text-xs sm:text-sm text-slate-500">
+                  Commencez par dessiner votre signature via le bouton en haut.
+                </p>
+              )}
               <button
                 onClick={submitSignature}
-                disabled={submitting || !signatureDataUrl}
+                disabled={submitting || !step1Done || !step2Done}
                 className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 flex justify-center items-center"
               >
                 {submitting ? (
