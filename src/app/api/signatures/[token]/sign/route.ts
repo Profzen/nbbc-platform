@@ -237,8 +237,8 @@ async function buildSignedPdf(params: {
     ? await pdfDoc.embedPng(params.signatureImageBuffer)
     : await pdfDoc.embedJpg(params.signatureImageBuffer);
 
-  const defaultWidthRatio = 0.18;
-  const widthRatio = Math.min(0.32, Math.max(0.12, Number(params.placement.widthRatio || defaultWidthRatio)));
+  const defaultWidthRatio = 0.26;
+  const widthRatio = Math.min(0.45, Math.max(0.12, Number(params.placement.widthRatio || defaultWidthRatio)));
   const drawWidth = pageWidth * widthRatio;
   const drawHeight = (embeddedSignature.height / embeddedSignature.width) * drawWidth;
 
