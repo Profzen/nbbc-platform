@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, type MouseEvent } from 'react';
+import { useState, useEffect, useRef, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useParams } from 'next/navigation';
 import SignatureCanvas from 'react-signature-canvas';
 import { PenTool, CheckCircle, AlertTriangle, FileText, Download, MapPin } from 'lucide-react';
@@ -20,13 +20,15 @@ export default function SignaturePage() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [placementMode, setPlacementMode] = useState(false);
+  const [draggingSignature, setDraggingSignature] = useState(false);
   const [placement, setPlacement] = useState({ xRatio: 0.8, yRatio: 0.88, widthRatio: 0.26 });
   /** Pixel position of the chosen placement inside the document viewport (for visual feedback) */
   const [placementPixels, setPlacementPixels] = useState<{ x: number; y: number } | null>(null);
-  /** Bounding rect of the document area at the moment placement mode was started */
-  const [docAreaRect, setDocAreaRect] = useState<DOMRect | null>(null);
+  /** Bounding rect of the visible document surface used for precise placement */
+  const [documentSurfaceRect, setDocumentSurfaceRect] = useState<DOMRect | null>(null);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
   const documentAreaRef = useRef<HTMLDivElement | null>(null);
+  const documentSurfaceRef = useRef<HTMLDivElement | null>(null);
   const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
   const documentProxyUrl = token ? `/api/signatures/${token}/document` : '';
@@ -34,6 +36,24 @@ export default function SignaturePage() {
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  useEffect(() => {
+    if (!placementMode && !placementPixels) return;
+
+    const syncDocumentSurfaceRect = () => {
+      if (documentSurfaceRef.current) {
+        setDocumentSurfaceRect(documentSurfaceRef.current.getBoundingClientRect());
+      }
+    };
+
+    syncDocumentSurfaceRect();
+    window.addEventListener('resize', syncDocumentSurfaceRect);
+    window.addEventListener('scroll', syncDocumentSurfaceRect, true);
+    return () => {
+      window.removeEventListener('resize', syncDocumentSurfaceRect);
+      window.removeEventListener('scroll', syncDocumentSurfaceRect, true);
+    };
+  }, [placementMode, placementPixels]);
 
   const readJsonSafely = async (response: Response, fallbackMessage: string) => {
     const contentType = response.headers.get('content-type') || '';
@@ -74,6 +94,34 @@ export default function SignaturePage() {
     setSignatureDataUrl(null);
     setPlacementMode(false);
     setPlacementPixels(null);
+    setDraggingSignature(false);
+  };
+
+  const syncDocumentSurfaceRect = () => {
+    if (!documentSurfaceRef.current) return null;
+    const rect = documentSurfaceRef.current.getBoundingClientRect();
+    setDocumentSurfaceRect(rect);
+    return rect;
+  };
+
+  const updatePlacementFromClientPoint = (clientX: number, clientY: number) => {
+    const rect = syncDocumentSurfaceRect();
+    if (!rect) return;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const xRatio = Math.min(0.95, Math.max(0.05, x / rect.width));
+    const yRatio = Math.min(0.95, Math.max(0.05, y / rect.height));
+
+    setPlacementPixels({
+      x: xRatio * rect.width,
+      y: yRatio * rect.height,
+    });
+    setPlacement((currentPlacement) => ({
+      ...currentPlacement,
+      xRatio,
+      yRatio,
+    }));
   };
 
   const saveSignatureFromPad = () => {
@@ -89,9 +137,7 @@ export default function SignaturePage() {
     setShowSignatureModal(false);
     // Auto-start placement mode — capture rect after modal close animation
     setTimeout(() => {
-      if (documentAreaRef.current) {
-        setDocAreaRect(documentAreaRef.current.getBoundingClientRect());
-      }
+      syncDocumentSurfaceRect();
       setPlacementPixels(null);
       setPlacementMode(true);
     }, 120);
@@ -103,9 +149,7 @@ export default function SignaturePage() {
       setShowSignatureModal(true);
       return;
     }
-    if (documentAreaRef.current) {
-      setDocAreaRect(documentAreaRef.current.getBoundingClientRect());
-    }
+    syncDocumentSurfaceRect();
     setActionError(null);
     setPlacementPixels(null);
     setPlacementMode(true);
@@ -117,14 +161,31 @@ export default function SignaturePage() {
    * click handler which the iframe blocks (cross-origin pointer events).
    */
   const onPlacementOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (!docAreaRect) return;
-    const x = event.clientX - docAreaRect.left;
-    const y = event.clientY - docAreaRect.top;
-    const xRatio = Math.min(0.95, Math.max(0.05, x / docAreaRect.width));
-    const yRatio = Math.min(0.95, Math.max(0.05, y / docAreaRect.height));
-    setPlacementPixels({ x, y });
-    setPlacement({ xRatio, yRatio, widthRatio: placement.widthRatio });
+    updatePlacementFromClientPoint(event.clientX, event.clientY);
     setPlacementMode(false);
+  };
+
+  const onSignaturePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!placementPixels) return;
+    event.preventDefault();
+    event.stopPropagation();
+    syncDocumentSurfaceRect();
+    setDraggingSignature(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updatePlacementFromClientPoint(event.clientX, event.clientY);
+  };
+
+  const onSignaturePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!draggingSignature) return;
+    event.preventDefault();
+    updatePlacementFromClientPoint(event.clientX, event.clientY);
+  };
+
+  const stopDraggingSignature = (event?: ReactPointerEvent<HTMLDivElement>) => {
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDraggingSignature(false);
   };
 
   const downloadDocument = async () => {
@@ -204,6 +265,9 @@ export default function SignaturePage() {
   // Step state helpers
   const step1Done = !!signatureDataUrl;
   const step2Done = !!placementPixels;
+  const signaturePreviewWidth = documentSurfaceRect
+    ? Math.round(documentSurfaceRect.width * placement.widthRatio)
+    : 240;
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -229,14 +293,14 @@ export default function SignaturePage() {
     <div className="min-h-screen bg-slate-100">
       {/* Fixed placement overlay — covers entire doc area viewport including iframe
           (iframes swallow pointer events; this overlay sits on top fixed) */}
-      {placementMode && docAreaRect && (
+      {placementMode && documentSurfaceRect && (
         <div
           className="fixed z-40 cursor-crosshair"
           style={{
-            left: `${docAreaRect.left}px`,
-            top: `${docAreaRect.top}px`,
-            width: `${docAreaRect.width}px`,
-            height: `${docAreaRect.height}px`,
+            left: `${documentSurfaceRect.left}px`,
+            top: `${documentSurfaceRect.top}px`,
+            width: `${documentSurfaceRect.width}px`,
+            height: `${documentSurfaceRect.height}px`,
             background: 'rgba(99, 102, 241, 0.10)',
           }}
           onClick={onPlacementOverlayClick}
@@ -249,31 +313,6 @@ export default function SignaturePage() {
           </div>
         </div>
       )}
-
-      {/* Signature preview pinned at exact click position (fixed, over document) */}
-      {placementPixels && docAreaRect && signaturePreviewUrl && !placementMode && (
-        <div
-          className="fixed z-30 pointer-events-none"
-          style={{
-            left: `${docAreaRect.left + placementPixels.x}px`,
-            top: `${docAreaRect.top + placementPixels.y}px`,
-            transform: 'translate(-50%, -50%)',
-          }}
-        >
-          <img
-            src={signaturePreviewUrl}
-            alt="Aperçu signature"
-            className="rounded-lg border-2 border-indigo-400 bg-white/95 shadow-2xl"
-            style={{ width: `${Math.round(docAreaRect.width * placement.widthRatio)}px` }}
-          />
-          <div className="text-center mt-1">
-            <span className="text-[11px] bg-indigo-600/90 text-white px-2 py-0.5 rounded-full">
-              Emplacement de signature
-            </span>
-          </div>
-        </div>
-      )}
-
 
       {success ? (
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -378,11 +417,41 @@ export default function SignaturePage() {
               ref={documentAreaRef}
               className="relative flex-1 overflow-y-auto bg-slate-100 p-2 md:p-6"
             >
-              <div className="bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 p-6 md:p-12">
+              <div
+                ref={documentSurfaceRef}
+                className="relative bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 overflow-hidden"
+              >
                 {data.typeSource === 'TEMPLATE' ? (
-                  <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-a:text-indigo-600" dangerouslySetInnerHTML={{ __html: data.contenuGele || '' }} />
+                  <div className="prose prose-slate max-w-none p-6 md:p-12 prose-p:leading-relaxed prose-a:text-indigo-600" dangerouslySetInnerHTML={{ __html: data.contenuGele || '' }} />
                 ) : (
                   <iframe src={documentProxyUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
+                )}
+
+                {placementPixels && signaturePreviewUrl && !placementMode && (
+                  <div
+                    className="absolute z-30 touch-none"
+                    style={{
+                      left: `${placement.xRatio * 100}%`,
+                      top: `${placement.yRatio * 100}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    onPointerDown={onSignaturePointerDown}
+                    onPointerMove={onSignaturePointerMove}
+                    onPointerUp={stopDraggingSignature}
+                    onPointerCancel={stopDraggingSignature}
+                  >
+                    <div className="flex flex-col items-center gap-1 pointer-events-auto select-none">
+                      <img
+                        src={signaturePreviewUrl}
+                        alt="Aperçu signature"
+                        className={`rounded-lg border-2 bg-white/95 shadow-2xl ${draggingSignature ? 'border-emerald-500 shadow-emerald-200' : 'border-indigo-400'}`}
+                        style={{ width: `${signaturePreviewWidth}px` }}
+                      />
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full text-white ${draggingSignature ? 'bg-emerald-600' : 'bg-indigo-600/90'}`}>
+                        {draggingSignature ? 'Déplacement...' : 'Glissez pour ajuster'}
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -399,7 +468,7 @@ export default function SignaturePage() {
               {step2Done ? (
                 <p className="text-xs sm:text-sm text-emerald-600 font-medium flex items-center gap-1.5">
                   <MapPin size={14} className="shrink-0" />
-                  Emplacement choisi. Confirmez quand vous êtes prêt.
+                  Emplacement choisi. Vous pouvez encore faire glisser la signature avant de confirmer.
                 </p>
               ) : step1Done ? (
                 <p className="text-xs sm:text-sm text-indigo-600 font-medium">
