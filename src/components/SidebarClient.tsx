@@ -55,10 +55,15 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
         lg:relative lg:translate-x-0 lg:flex
       `}
       >
-        <div className="p-6 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Image src="/nbbcl.png" alt="NBBC" width={34} height={34} className="rounded-md" priority />
-            <span className="font-bold text-2xl tracking-wider text-blue-400">NBBC</span>
+        <div className="p-5 flex items-center justify-between border-b border-slate-800 bg-slate-950/40">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-14 h-14 rounded-xl bg-white/95 shadow-lg shadow-blue-900/35 border border-blue-100/80 flex items-center justify-center shrink-0">
+              <Image src="/nbbcl.png" alt="NBBC" width={46} height={46} className="object-contain" priority />
+            </div>
+            <div className="min-w-0">
+              <div className="font-black text-3xl leading-none tracking-wide text-blue-300">NBBC</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Platform</div>
+            </div>
           </div>
           <button onClick={() => setIsOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
             <X size={24} />
