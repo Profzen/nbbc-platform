@@ -1,26 +1,32 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from 'pdfjs-dist';
 
 // Required in production: without this, PDF.js cannot start its worker and fails to render.
 GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
 
-interface PdfViewerProps {
-  url: string;
-  onPageVisible?: (pageNumber: number) => void;
+export interface SignatureOverlay {
+  pageNum: number;
+  xRatio: number;
+  yRatio: number;
+  imageUrl: string;
+  widthPercent?: number;
 }
 
-export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
-  const [numPages, setNumPages] = useState(0);
+interface PdfViewerProps {
+  url: string;
+  /** Called when the user clicks on a page — coordinates are relative to that specific page element */
+  onPageClick?: (pageNumber: number, xRatio: number, yRatio: number) => void;
+  /** Optional signature image rendered inside the correct page at the given ratios */
+  signatureOverlay?: SignatureOverlay;
+}
+
+export default function PdfViewer({ url, onPageClick, signatureOverlay }: PdfViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
-  const [visiblePageNumber, setVisiblePageNumber] = useState(1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
 
-  // Load PDF and render all pages
   useEffect(() => {
     let cancelled = false;
 
@@ -28,28 +34,21 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
       try {
         setLoading(true);
         setError(null);
+
         const pdf = await getDocument(url).promise;
         if (cancelled) return;
-        const totalPages = pdf.numPages;
-        setNumPages(totalPages);
 
         const pageImages: string[] = [];
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          if (cancelled) break;
           const page = await pdf.getPage(pageNum);
           const viewport = page.getViewport({ scale: 2 });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           if (!context) continue;
-
           canvas.width = viewport.width;
           canvas.height = viewport.height;
-
-          await page.render({
-            canvasContext: context,
-            canvas,
-            viewport,
-          }).promise;
-
+          await page.render({ canvasContext: context, canvas, viewport }).promise;
           pageImages.push(canvas.toDataURL('image/png'));
         }
 
@@ -65,44 +64,16 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
     };
 
     loadPdf();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [url]);
 
-  // Set up intersection observer to track visible page
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const pageNum = parseInt(entry.target.getAttribute('data-page-num') || '1', 10);
-            setVisiblePageNumber(pageNum);
-            if (onPageVisible) {
-              onPageVisible(pageNum);
-            }
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
-
-    const pageElements = containerRef.current.querySelectorAll('[data-page-num]');
-    pageElements.forEach((el) => {
-      if (observerRef.current) {
-        observerRef.current.observe(el);
-      }
-    });
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [pages, onPageVisible]);
+  const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
+    if (!onPageClick) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xRatio = Math.min(0.95, Math.max(0.05, (e.clientX - rect.left) / rect.width));
+    const yRatio = Math.min(0.95, Math.max(0.05, (e.clientY - rect.top) / rect.height));
+    onPageClick(pageNum, xRatio, yRatio);
+  };
 
   if (loading) {
     return (
@@ -127,21 +98,36 @@ export default function PdfViewer({ url, onPageVisible }: PdfViewerProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full h-full overflow-y-auto bg-slate-100 flex flex-col items-center gap-4 p-4">
+    <div className="relative w-full h-full overflow-y-auto bg-slate-100 flex flex-col items-center gap-4 p-4">
       {pages.map((pageImage, index) => (
         <div
           key={index}
           data-page-num={index + 1}
-          className="relative bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden"
+          className={`relative bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden w-full max-w-2xl ${onPageClick ? 'cursor-crosshair' : ''}`}
+          onClick={(e) => handlePageClick(e, index + 1)}
         >
           <img
             src={pageImage}
             alt={`Page ${index + 1}`}
-            className="w-full h-auto max-w-2xl"
+            className="w-full h-auto block"
+            draggable={false}
           />
-          <div className="absolute bottom-2 right-2 text-xs bg-slate-900/70 text-white px-2 py-1 rounded">
+          <div className="absolute bottom-2 right-2 text-xs bg-slate-900/70 text-white px-2 py-1 rounded pointer-events-none">
             Page {index + 1}
           </div>
+          {signatureOverlay?.pageNum === index + 1 && (
+            <img
+              src={signatureOverlay.imageUrl}
+              alt="Signature"
+              className="absolute pointer-events-none select-none rounded border-2 border-indigo-400 shadow-lg"
+              style={{
+                left: `${signatureOverlay.xRatio * 100}%`,
+                top: `${signatureOverlay.yRatio * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                width: `${signatureOverlay.widthPercent ?? 25}%`,
+              }}
+            />
+          )}
         </div>
       ))}
     </div>
