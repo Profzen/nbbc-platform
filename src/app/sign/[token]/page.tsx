@@ -6,6 +6,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import { PenTool, CheckCircle, AlertTriangle, FileText, Download, MapPin } from 'lucide-react';
 import { uploadFileToCloudinary } from '@/lib/cloudinary-upload-client';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import PdfViewer from '@/components/PdfViewer';
 
 export default function SignaturePage() {
   const params = useParams();
@@ -183,6 +184,13 @@ export default function SignaturePage() {
     if (!draggingSignature) return;
     event.preventDefault();
     updatePlacementFromClientPoint(event.clientX, event.clientY);
+  };
+
+  const onDetectVisiblePage = (pageNumber: number) => {
+    // When user is dragging signature over a page, auto-detect that page
+    if (draggingSignature || placementMode) {
+      setSelectedPage(pageNumber);
+    }
   };
 
   const stopDraggingSignature = (event?: ReactPointerEvent<HTMLDivElement>) => {
@@ -407,7 +415,9 @@ export default function SignaturePage() {
                   )}
                   {data.typeSource === 'UPLOAD' && (
                     <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <label htmlFor="signature-page" className="font-semibold">Page</label>
+                      <label htmlFor="signature-page" className="font-semibold text-slate-700">
+                        {draggingSignature || placementMode ? '📍 Page:' : 'Page:'}
+                      </label>
                       <input
                         id="signature-page"
                         type="number"
@@ -417,7 +427,8 @@ export default function SignaturePage() {
                           const rawValue = Number(event.target.value || 1);
                           setSelectedPage(Number.isFinite(rawValue) ? Math.max(1, Math.floor(rawValue)) : 1);
                         }}
-                        className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        className={`w-20 rounded-lg border px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-300 ${draggingSignature || placementMode ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-700'}`}
+                        readOnly={draggingSignature || placementMode}
                       />
                     </div>
                   )}
@@ -442,12 +453,12 @@ export default function SignaturePage() {
             >
               <div
                 ref={documentSurfaceRef}
-                className="relative bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 overflow-hidden"
+                className="relative bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 overflow-hidden w-full"
               >
                 {data.typeSource === 'TEMPLATE' ? (
                   <div className="prose prose-slate max-w-none p-6 md:p-12 prose-p:leading-relaxed prose-a:text-indigo-600" dangerouslySetInnerHTML={{ __html: data.contenuGele || '' }} />
                 ) : (
-                  <iframe src={documentProxyUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
+                  <PdfViewer url={documentProxyUrl} onPageVisible={onDetectVisiblePage} />
                 )}
 
                 {placementPixels && signaturePreviewUrl && !placementMode && (
@@ -491,11 +502,11 @@ export default function SignaturePage() {
               {step2Done ? (
                 <p className="text-xs sm:text-sm text-emerald-600 font-medium flex items-center gap-1.5">
                   <MapPin size={14} className="shrink-0" />
-                  Emplacement choisi. Vous pouvez encore faire glisser la signature avant de confirmer.
+                  ✓ Emplacement choisi sur page {selectedPage}. Vous pouvez faire glisser pour ajuster.
                 </p>
               ) : step1Done ? (
                 <p className="text-xs sm:text-sm text-indigo-600 font-medium">
-                  Cliquez sur "Placer la signature" puis touchez le document à l'endroit voulu.
+                  Cliquez sur "Placer la signature" puis touchez le document. La page sera détectée automatiquement.
                 </p>
               ) : (
                 <p className="text-xs sm:text-sm text-slate-500">
