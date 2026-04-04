@@ -37,3 +37,16 @@ canvas,
 video {
   max-width: 100%;
 }
+
+button {
+  transition: transform 120ms ease, opacity 120ms ease, filter 120ms ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.85);
+}

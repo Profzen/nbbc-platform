@@ -287,7 +287,7 @@ export default function SignaturesAdminPage() {
                             <Link2 size={18} />
                           </button>
                         ) : (
-                          <a href={req.signatureImageUrl} target="_blank" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center justify-center" title="Voir la signature">
+                          <a href={req.signedDocumentUrl || req.signatureImageUrl || req.fichierPdfUrl} target="_blank" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center justify-center" title="Voir le document signé">
                             <Eye size={18} />
                           </a>
                         )}

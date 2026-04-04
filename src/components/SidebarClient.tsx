@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe } from 'lucide-react';
 import LogoutButton from './LogoutButton';
@@ -55,7 +56,10 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
       `}
       >
         <div className="p-6 flex items-center justify-between border-b border-slate-800">
-          <span className="font-bold text-2xl tracking-wider text-blue-400">NBBC</span>
+          <div className="flex items-center gap-2">
+            <Image src="/nbbcl.png" alt="NBBC" width={34} height={34} className="rounded-md" priority />
+            <span className="font-bold text-2xl tracking-wider text-blue-400">NBBC</span>
+          </div>
           <button onClick={() => setIsOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
             <X size={24} />
           </button>

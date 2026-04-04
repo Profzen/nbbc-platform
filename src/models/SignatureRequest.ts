@@ -16,6 +16,11 @@ export interface ISignatureRequest extends Document {
   statut: 'EN_ATTENTE' | 'SIGNE' | 'ANNULE';
   signatureImagePublicId?: string; // Image finale stockée sur cloudinary
   signatureImageUrl?: string;
+  signedDocumentUrl?: string;
+  signedDocumentPublicId?: string;
+  signaturePlacementX?: number;
+  signaturePlacementY?: number;
+  signaturePlacementWidth?: number;
   dateEnvoi: Date;
   dateSignature?: Date;
   ipSignature?: string;
@@ -39,6 +44,11 @@ const SignatureRequestSchema = new Schema<ISignatureRequest>({
   statut: { type: String, enum: ['EN_ATTENTE', 'SIGNE', 'ANNULE'], default: 'EN_ATTENTE' },
   signatureImagePublicId: { type: String },
   signatureImageUrl: { type: String },
+  signedDocumentUrl: { type: String },
+  signedDocumentPublicId: { type: String },
+  signaturePlacementX: { type: Number },
+  signaturePlacementY: { type: Number },
+  signaturePlacementWidth: { type: Number },
   dateEnvoi: { type: Date, default: Date.now },
   dateSignature: { type: Date },
   ipSignature: { type: String },

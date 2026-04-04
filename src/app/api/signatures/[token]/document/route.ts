@@ -132,25 +132,31 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
       return NextResponse.json({ success: false, error: 'Lien de signature invalide ou expiré.' }, { status: 404 });
     }
 
-    if (signatureRequest.typeSource !== 'UPLOAD' || !signatureRequest.fichierPdfUrl) {
+    const effectivePdfUrl = signatureRequest.signedDocumentUrl || signatureRequest.fichierPdfUrl;
+    const effectivePdfPublicId = signatureRequest.signedDocumentPublicId || signatureRequest.fichierPdfPublicId;
+    const effectiveResourceType = signatureRequest.signedDocumentUrl ? 'raw' : signatureRequest.fichierPdfResourceType;
+    const effectiveDeliveryType = signatureRequest.signedDocumentUrl ? 'upload' : signatureRequest.fichierPdfDeliveryType;
+    const effectiveFormat = signatureRequest.signedDocumentUrl ? 'pdf' : signatureRequest.fichierPdfFormat;
+
+    if (signatureRequest.typeSource !== 'UPLOAD' || !effectivePdfUrl) {
       return NextResponse.json({ success: false, error: 'Aucun document PDF disponible pour cette demande.' }, { status: 400 });
     }
 
-    const candidateUrls: string[] = [signatureRequest.fichierPdfUrl];
+    const candidateUrls: string[] = [String(effectivePdfUrl)];
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY || process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
     const asset: CandidateAsset = {
-      publicId: String(signatureRequest.fichierPdfPublicId || ''),
-      resourceType: String(signatureRequest.fichierPdfResourceType || 'image'),
-      deliveryType: String(signatureRequest.fichierPdfDeliveryType || 'upload'),
-      format: String(signatureRequest.fichierPdfFormat || 'pdf'),
+      publicId: String(effectivePdfPublicId || ''),
+      resourceType: String(effectiveResourceType || 'image'),
+      deliveryType: String(effectiveDeliveryType || 'upload'),
+      format: String(effectiveFormat || 'pdf'),
     };
 
     if (!asset.publicId) {
-      const parsed = parseCloudinaryUrl(signatureRequest.fichierPdfUrl);
+      const parsed = parseCloudinaryUrl(String(effectivePdfUrl));
       if (parsed) {
         asset.publicId = parsed.publicId;
         asset.resourceType = parsed.resourceType;

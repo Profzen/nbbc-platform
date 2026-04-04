@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type MouseEvent } from 'react';
 import { useParams } from 'next/navigation';
 import SignatureCanvas from 'react-signature-canvas';
 import { PenTool, CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
@@ -16,7 +16,12 @@ export default function SignaturePage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
+  const [placementMode, setPlacementMode] = useState(false);
+  const [placement, setPlacement] = useState({ xRatio: 0.8, yRatio: 0.88, widthRatio: 0.26 });
+  const [signedDocumentUrl, setSignedDocumentUrl] = useState<string | null>(null);
   const sigCanvas = useRef<SignatureCanvas | null>(null);
+  const documentAreaRef = useRef<HTMLDivElement | null>(null);
   const recipientDisplayName = data?.clientId?.prenom || data?.clientNomLibre || 'Client';
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
   const documentProxyUrl = token ? `/api/signatures/${token}/document` : '';
@@ -60,6 +65,39 @@ export default function SignaturePage() {
 
   const clearSignature = () => {
     sigCanvas.current?.clear();
+    setSignaturePreviewUrl(null);
+  };
+
+  const prepareSignaturePreview = async () => {
+    if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
+      setActionError('Veuillez dessiner votre signature avant de la placer.');
+      return false;
+    }
+
+    setActionError(null);
+    setSignaturePreviewUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+    return true;
+  };
+
+  const startPlacement = async () => {
+    const ok = await prepareSignaturePreview();
+    if (!ok) return;
+    setPlacementMode(true);
+  };
+
+  const onDocumentClickForPlacement = (event: MouseEvent<HTMLDivElement>) => {
+    if (!placementMode || !documentAreaRef.current) return;
+
+    const rect = documentAreaRef.current.getBoundingClientRect();
+    const xRatio = (event.clientX - rect.left) / rect.width;
+    const yRatio = (event.clientY - rect.top) / rect.height;
+
+    setPlacement({
+      xRatio: Math.min(0.95, Math.max(0.05, xRatio)),
+      yRatio: Math.min(0.95, Math.max(0.05, yRatio)),
+      widthRatio: placement.widthRatio,
+    });
+    setPlacementMode(false);
   };
 
   const downloadDocument = async () => {
@@ -96,7 +134,7 @@ export default function SignaturePage() {
 
   const submitSignature = async () => {
     if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
-      alert('Veuillez dessiner votre signature avant de confirmer.');
+      setActionError('Veuillez dessiner votre signature avant de confirmer.');
       return;
     }
 
@@ -120,12 +158,18 @@ export default function SignaturePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           signatureImageUrl: uploadData.secureUrl,
-          signatureImagePublicId: uploadData.publicId
+          signatureImagePublicId: uploadData.publicId,
+          placement,
         })
       });
 
       const json = await readJsonSafely(res, 'Réponse invalide lors de la validation de signature.');
-      if (json.success) setSuccess(true);
+      if (json.success) {
+        if (json.data?.signedDocumentUrl) {
+          setSignedDocumentUrl(json.data.signedDocumentUrl);
+        }
+        setSuccess(true);
+      }
       else setActionError(json.error || "Erreur lors de la validation finale.");
 
     } catch (e: any) {
@@ -166,11 +210,21 @@ export default function SignaturePage() {
             </div>
             <h1 className="text-2xl font-black text-slate-800 mb-3">Merci, {recipientDisplayName} !</h1>
             <p className="text-slate-500 mb-6">Votre signature a bien été enregistrée et transmise à nos équipes sécurisées.</p>
+            {signedDocumentUrl && (
+              <a
+                href={signedDocumentUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100"
+              >
+                <Download size={16} /> Ouvrir le document signé
+              </a>
+            )}
             <p className="text-sm text-slate-400">Vous pouvez fermer cette page.</p>
           </div>
         </div>
       ) : (
-        <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
+        <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
           
           <header className="bg-white rounded-2xl p-6 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center shrink-0">
@@ -182,22 +236,35 @@ export default function SignaturePage() {
             </div>
           </header>
 
-          <main className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[70vh] sm:h-[600px] border border-slate-200">
+          <main className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[78vh] sm:h-[740px] border border-slate-200">
             <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-700">{data.titreDocument}</h2>
-              {data.typeSource === 'UPLOAD' && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={downloadDocument}
-                  disabled={downloading}
-                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800 disabled:opacity-60"
+                  onClick={startPlacement}
+                  className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800"
                 >
-                  <Download size={16} /> {downloading ? 'Téléchargement...' : 'Télécharger'}
+                  <PenTool size={16} /> {placementMode ? 'Cliquez dans le document...' : 'Placer la signature'}
                 </button>
-              )}
+                {data.typeSource === 'UPLOAD' && (
+                  <button
+                    type="button"
+                    onClick={downloadDocument}
+                    disabled={downloading}
+                    className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 hover:text-indigo-800 disabled:opacity-60"
+                  >
+                    <Download size={16} /> {downloading ? 'Téléchargement...' : 'Télécharger'}
+                  </button>
+                )}
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto bg-slate-100 p-2 md:p-6">
+            <div
+              ref={documentAreaRef}
+              className={`relative flex-1 overflow-y-auto bg-slate-100 p-2 md:p-6 ${placementMode ? 'cursor-crosshair' : ''}`}
+              onClick={onDocumentClickForPlacement}
+            >
               <div className="bg-white min-h-full rounded-xl shadow-sm border border-slate-200 text-slate-700 p-6 md:p-12">
                 {data.typeSource === 'TEMPLATE' ? (
                   <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-a:text-indigo-600" dangerouslySetInnerHTML={{ __html: data.contenuGele || '' }} />
@@ -205,6 +272,20 @@ export default function SignaturePage() {
                   <iframe src={documentProxyUrl} className="w-full h-full min-h-[500px] border-0 rounded-lg" title="Document PDF" />
                 )}
               </div>
+
+              {signaturePreviewUrl && (
+                <img
+                  src={signaturePreviewUrl}
+                  alt="Aperçu signature"
+                  className="pointer-events-none absolute z-20 rounded border border-indigo-300 bg-white/95 shadow-xl"
+                  style={{
+                    width: `${placement.widthRatio * 100}%`,
+                    left: `${placement.xRatio * 100}%`,
+                    top: `${placement.yRatio * 100}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                />
+              )}
             </div>
           </main>
 
@@ -234,7 +315,7 @@ export default function SignaturePage() {
             </div>
             
             <p className="text-xs text-slate-400 mt-3 text-center">
-              Signez dans la case ci-dessus à l'aide de votre souris ou de votre doigt.
+              1) Dessinez votre signature ici. 2) Cliquez sur "Placer la signature" puis cliquez dans le document.
             </p>
 
             <div className="mt-6 flex justify-end">
