@@ -153,6 +153,10 @@ function sanitizePdfText(value: unknown) {
     .replace(/\n/g, ' ');
 }
 
+function formatPdfCurrency(value: number) {
+  return sanitizePdfText(formatCurrencyFCFA(value));
+}
+
 function buildExportDateLabel() {
   const now = new Date();
   return `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -699,12 +703,15 @@ export default function ComptabilitePage() {
           sanitizePdfText(item.tiers || ''),
           sanitizePdfText(debit?.nom || ''),
           sanitizePdfText(credit?.nom || ''),
-          sanitizePdfText(formatCurrencyFCFA(item.amountFCFA || 0)),
+          formatPdfCurrency(item.amountFCFA || 0),
         ];
       }),
       styles: {
         fontSize: 9,
         cellPadding: 5,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'left',
         textColor: [30, 41, 59],
         lineColor: [226, 232, 240],
       },
@@ -712,17 +719,19 @@ export default function ComptabilitePage() {
         fillColor: [30, 64, 175],
         textColor: 255,
         fontStyle: 'bold',
+        halign: 'left',
+        valign: 'middle',
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        0: { cellWidth: 72 },
-        1: { cellWidth: 210 },
-        2: { halign: 'right', cellWidth: 48 },
-        3: { halign: 'right', cellWidth: 88 },
-        4: { cellWidth: 130 },
-        5: { cellWidth: 120 },
-        6: { cellWidth: 120 },
-        7: { halign: 'right', cellWidth: 92 },
+        0: { cellWidth: 66 },
+        1: { cellWidth: 170 },
+        2: { halign: 'right', cellWidth: 42 },
+        3: { halign: 'right', cellWidth: 74 },
+        4: { cellWidth: 96 },
+        5: { cellWidth: 110 },
+        6: { cellWidth: 110 },
+        7: { halign: 'right', cellWidth: 86 },
       },
       theme: 'striped',
     });
@@ -730,7 +739,7 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total: ${formatCurrencyFCFA(list.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}`, 24, finalY + 22);
+    doc.text(`Total: ${formatPdfCurrency(list.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}`, 24, finalY + 22);
     appendPageNumbers(doc);
     doc.save(`${type.toLowerCase()}_${buildExportFileDate()}.pdf`);
   };
@@ -753,12 +762,15 @@ export default function ComptabilitePage() {
           sanitizePdfText(debit?.nom || ''),
           sanitizePdfText(credit?.nom || ''),
           sanitizePdfText(item.operateur),
-          sanitizePdfText(formatCurrencyFCFA(item.montant || 0)),
+          formatPdfCurrency(item.montant || 0),
         ];
       }),
       styles: {
         fontSize: 9,
         cellPadding: 5,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'left',
         textColor: [30, 41, 59],
         lineColor: [226, 232, 240],
       },
@@ -766,6 +778,8 @@ export default function ComptabilitePage() {
         fillColor: [30, 64, 175],
         textColor: 255,
         fontStyle: 'bold',
+        halign: 'left',
+        valign: 'middle',
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -784,7 +798,7 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total: ${formatCurrencyFCFA(summary.totals.depots + summary.totals.retraits)}`, 24, finalY + 22);
+    doc.text(`Total: ${formatPdfCurrency(summary.totals.depots + summary.totals.retraits)}`, 24, finalY + 22);
     appendPageNumbers(doc);
     doc.save(`depots_${buildExportFileDate()}.pdf`);
   };
@@ -800,12 +814,15 @@ export default function ComptabilitePage() {
         sanitizePdfText(account.nom),
         sanitizePdfText(account.devise || 'FCFA'),
         sanitizePdfText(formatNumber(account.tauxFCFA || 1)),
-        sanitizePdfText(formatCurrencyFCFA(account.soldeCalculeFCFA || 0)),
+        formatPdfCurrency(account.soldeCalculeFCFA || 0),
         sanitizePdfText(`${formatNumber(account.equivalentUnits || 0)} ${account.devise || 'FCFA'}`),
       ]),
       styles: {
         fontSize: 9,
         cellPadding: 5,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'left',
         textColor: [30, 41, 59],
         lineColor: [226, 232, 240],
       },
@@ -813,6 +830,8 @@ export default function ComptabilitePage() {
         fillColor: [30, 64, 175],
         textColor: 255,
         fontStyle: 'bold',
+        halign: 'left',
+        valign: 'middle',
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -828,15 +847,15 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total comptes: ${formatCurrencyFCFA(summary.totals.totalComptes)}`, 40, y);
+    doc.text(`Total comptes: ${formatPdfCurrency(summary.totals.totalComptes)}`, 40, y);
     y += 16;
-    doc.text(`Bénéfice: ${formatCurrencyFCFA(summary.totals.benefice)}`, 40, y);
+    doc.text(`Bénéfice: ${formatPdfCurrency(summary.totals.benefice)}`, 40, y);
     y += 16;
-    doc.text(`Dépenses: ${formatCurrencyFCFA(summary.totals.depenses)}`, 40, y);
+    doc.text(`Dépenses: ${formatPdfCurrency(summary.totals.depenses)}`, 40, y);
     y += 16;
-    doc.text(`Dettes: ${formatCurrencyFCFA(summary.totals.dettes)}`, 40, y);
+    doc.text(`Dettes: ${formatPdfCurrency(summary.totals.dettes)}`, 40, y);
     y += 16;
-    doc.text(`Total disponible: ${formatCurrencyFCFA(summary.totals.totalDisponible)}`, 40, y);
+    doc.text(`Total disponible: ${formatPdfCurrency(summary.totals.totalDisponible)}`, 40, y);
     appendPageNumbers(doc);
     doc.save(`comptes_${buildExportFileDate()}.pdf`);
   };
