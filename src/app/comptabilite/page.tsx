@@ -203,6 +203,11 @@ function appendPageNumbers(doc: jsPDF) {
   }
 }
 
+function isNumericHeader(text: string) {
+  const normalized = sanitizePdfText(text).toLowerCase();
+  return normalized.includes('qte') || normalized.includes('qté') || normalized.includes('pu') || normalized.includes('taux') || normalized.includes('total') || normalized.includes('solde') || normalized.includes('equiv');
+}
+
 export default function ComptabilitePage() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [loading, setLoading] = useState(true);
@@ -734,6 +739,14 @@ export default function ComptabilitePage() {
         lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section === 'head') {
+          const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+          if (isNumericHeader(headerText)) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+      },
       columnStyles: {
         0: { cellWidth: 60 },
         1: { cellWidth: 130 },
@@ -801,6 +814,14 @@ export default function ComptabilitePage() {
         lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section === 'head') {
+          const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+          if (isNumericHeader(headerText)) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+      },
       columnStyles: {
         0: { cellWidth: 66 },
         1: { cellWidth: 56 },
@@ -860,6 +881,14 @@ export default function ComptabilitePage() {
         lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section === 'head') {
+          const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+          if (isNumericHeader(headerText)) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+      },
       columnStyles: {
         0: { cellWidth: 210 },
         1: { cellWidth: 72 },
