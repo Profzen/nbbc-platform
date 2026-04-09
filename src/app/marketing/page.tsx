@@ -35,7 +35,7 @@ interface AnalyticsData {
   logs: { email: string; status: string; sentAt: string; errorMessage?: string }[];
 }
 
-interface Client { _id: string; nom: string; prenom: string; email: string; telephone?: string; typeClient: string; }
+interface Client { _id: string; nom: string; prenom: string; email: string; telephone?: string; typeClient: string; paysResidence?: string; servicesUtilises?: string[]; }
 interface Groupe { _id: string; nom: string; description?: string; couleur: string; clientIds: Client[]; }
 
 const TYPES_CLIENT = ['PARTICULIER', 'ENTREPRISE', 'INVESTISSEUR', 'PARTENAIRE'];
@@ -116,6 +116,7 @@ export default function MarketingPage() {
     nom: '', description: '', couleur: '#6366f1', clientIds: [] as string[],
   });
   const [groupeClientSearch, setGroupeClientSearch] = useState('');
+  const [generatingDefaults, setGeneratingDefaults] = useState(false);
 
   // ─── Fetch ─────────────────────────────────────────────────────────────────
   const fetchCampaigns = useCallback(async () => {
@@ -311,6 +312,69 @@ export default function MarketingPage() {
       ...f,
       clientIds: f.clientIds.includes(cid) ? f.clientIds.filter(x => x !== cid) : [...f.clientIds, cid],
     }));
+  };
+
+  const generateDefaultGroups = async () => {
+    await loadClients();
+    setGeneratingDefaults(true);
+    try {
+      const existingNames = new Set(groupes.map(g => g.nom));
+      const groupsToCreate: { nom: string; description: string; couleur: string; clientIds: string[] }[] = [];
+
+      // --- Groupes par pays ---
+      const byCountry = new Map<string, string[]>();
+      allClients.forEach(c => {
+        const pays = (c.paysResidence || '').trim();
+        if (!pays) return;
+        if (!byCountry.has(pays)) byCountry.set(pays, []);
+        byCountry.get(pays)!.push(c._id);
+      });
+      const countryColors = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#14b8a6', '#22c55e', '#64748b'];
+      let ci = 0;
+      byCountry.forEach((ids, pays) => {
+        const nom = `🌍 ${pays}`;
+        if (!existingNames.has(nom)) {
+          groupsToCreate.push({ nom, description: `Clients résidant en/au ${pays}`, couleur: countryColors[ci % countryColors.length], clientIds: ids });
+          ci++;
+        }
+      });
+
+      // --- Groupes par service ---
+      const SERVICE_LABELS: Record<string, string> = {
+        ZELLE: 'Zelle', CASH_APP: 'CashApp', WIRE: 'Wire', PAYPAL: 'PayPal',
+        CRYPTO: 'Crypto', EURO: 'Euro', WISE: 'Wise', AUTRE: 'Autre',
+      };
+      const byService = new Map<string, string[]>();
+      allClients.forEach(c => {
+        (c.servicesUtilises || []).forEach(s => {
+          if (!byService.has(s)) byService.set(s, []);
+          byService.get(s)!.push(c._id);
+        });
+      });
+      const serviceColors = ['#22c55e', '#14b8a6', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#f97316', '#64748b'];
+      let si = 0;
+      byService.forEach((ids, service) => {
+        const label = SERVICE_LABELS[service] || service;
+        const nom = `⚡ ${label}`;
+        if (!existingNames.has(nom)) {
+          groupsToCreate.push({ nom, description: `Clients utilisant ${label}`, couleur: serviceColors[si % serviceColors.length], clientIds: ids });
+          si++;
+        }
+      });
+
+      // Créer les groupes via l'API
+      for (const g of groupsToCreate) {
+        await fetch('/api/marketing/groupes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(g),
+        });
+      }
+
+      await fetchGroupes();
+    } finally {
+      setGeneratingDefaults(false);
+    }
   };
 
   const filteredGroupeClients = useMemo(() => {
@@ -861,11 +925,26 @@ export default function MarketingPage() {
               </div>
               <h3 className="text-lg font-bold text-slate-700">Aucun groupe</h3>
               <p className="text-slate-400 mt-1 mb-5 text-sm">Les groupes permettent de cibler des ensembles précis de clients dans vos campagnes.</p>
-              <button onClick={openNewGroupe} className="bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700 text-sm">
-                Créer un groupe
-              </button>
+              <div className="flex gap-3 flex-wrap justify-center">
+                <button onClick={openNewGroupe} className="bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700 text-sm">
+                  Créer un groupe
+                </button>
+                <button onClick={generateDefaultGroups} disabled={generatingDefaults}
+                  className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 text-sm disabled:opacity-60 flex items-center gap-2">
+                  {generatingDefaults ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Globe size={15} />}
+                  {generatingDefaults ? 'Génération...' : 'Générer groupes par défaut'}
+                </button>
+              </div>
             </div>
           ) : (
+            <>
+            <div className="flex justify-end mb-3">
+              <button onClick={generateDefaultGroups} disabled={generatingDefaults}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-bold hover:bg-indigo-100 disabled:opacity-60 transition-colors">
+                {generatingDefaults ? <span className="w-3.5 h-3.5 border-2 border-indigo-400/40 border-t-indigo-600 rounded-full animate-spin" /> : <Globe size={14} />}
+                {generatingDefaults ? 'Génération...' : 'Générer groupes par défaut'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {groupes.map(g => (
                 <div key={g._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all">
@@ -915,6 +994,7 @@ export default function MarketingPage() {
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
       )}
