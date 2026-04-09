@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import DepotRetrait from '@/models/DepotRetrait';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -33,6 +36,14 @@ export async function POST(request: Request) {
       description: String(body?.description || '').trim() || undefined,
       notes: String(body?.notes || '').trim() || undefined,
     });
+
+    const session = await getServerSession(authOptions);
+    await logActivity('Dépôt/Retrait créé', `${op.type} — ${op.montant} (${op.operateur || ''})`, {
+      id: (session?.user as any)?.id,
+      name: session?.user?.name || '',
+      role: (session?.user as any)?.role
+    });
+
     return NextResponse.json({ success: true, data: op }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });

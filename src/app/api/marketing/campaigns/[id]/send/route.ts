@@ -6,6 +6,9 @@ import GroupeClient from '@/models/GroupeClient';
 import DeliveryLog from '@/models/DeliveryLog';
 import { sendMail } from '@/lib/mailer';
 import { sendSms } from '@/lib/sms-sender';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -110,6 +113,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   campaign.statut = echecs === clients.length ? 'ECHEC' : 'ENVOYE';
   campaign.dateEnvoi = new Date();
   await campaign.save();
+
+  const session = await getServerSession(authOptions);
+  await logActivity('Campagne envoyée', `${campaign.sujet} — ${envoyes} envoyés, ${echecs} échecs sur ${clients.length}`, {
+    id: (session?.user as any)?.id,
+    name: session?.user?.name || '',
+    role: (session?.user as any)?.role
+  });
 
   return NextResponse.json({
     success: true,

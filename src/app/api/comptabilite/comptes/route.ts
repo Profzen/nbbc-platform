@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Compte from '@/models/Compte';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -33,6 +36,13 @@ export async function POST(request: Request) {
       couleur: String(body?.couleur || '#2563eb'),
       ordre: Number(body?.ordre || 0),
       actif: body?.actif !== false,
+    });
+
+    const session = await getServerSession(authOptions);
+    await logActivity('Compte créé', `${compte.nom} (${compte.devise})`, {
+      id: (session?.user as any)?.id,
+      name: session?.user?.name || '',
+      role: (session?.user as any)?.role
     });
 
     return NextResponse.json({ success: true, data: compte }, { status: 201 });

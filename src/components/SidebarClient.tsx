@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe } from 'lucide-react';
+import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity } from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
 interface SidebarClientProps {
@@ -20,6 +20,8 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
   if (pathname.startsWith('/kyc/') && pathname.length > 10) return null;
   if (pathname.startsWith('/sign/')) return null;
 
+  const isAdmin = (session?.user as any)?.role === 'SUPER_ADMIN';
+
   const navLinks = [
     { href: '/', label: 'Dashboard', icon: BarChart3 },
     { href: '/clients', label: 'Clients', icon: Users },
@@ -28,7 +30,9 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
     { href: '/comptabilite', label: 'Comptabilité', icon: BookOpen },
     { href: '/kyc', label: 'Vérification KYC', icon: ShieldCheck, badge: pendingKyc },
     { href: '/marketing', label: 'Marketing', icon: Megaphone },
+    { href: '/materiel', label: 'Matériel', icon: Package },
     { href: '/nos-sites', label: 'Nos sites', icon: Globe },
+    ...(isAdmin ? [{ href: '/logs', label: 'Journal d\'activité', icon: Activity }] : []),
   ];
 
   return (

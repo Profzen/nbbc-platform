@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
 import Client from '@/models/Client';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -28,6 +31,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     if (!client) {
       return NextResponse.json({ success: false, error: 'Client not found' }, { status: 404 });
     }
+    const session = await getServerSession(authOptions);
+    await logActivity('Client modifié', `${client.prenom} ${client.nom}`, { id: (session?.user as any)?.id, name: session?.user?.name || '', role: (session?.user as any)?.role });
     return NextResponse.json({ success: true, data: client });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
@@ -42,6 +47,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     if (!deletedClient.deletedCount) {
       return NextResponse.json({ success: false, error: 'Client not found' }, { status: 404 });
     }
+    const session = await getServerSession(authOptions);
+    await logActivity('Client supprimé', `ID: ${params.id}`, { id: (session?.user as any)?.id, name: session?.user?.name || '', role: (session?.user as any)?.role });
     return NextResponse.json({ success: true, data: {} });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });

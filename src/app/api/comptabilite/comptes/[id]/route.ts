@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Compte from '@/models/Compte';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { logActivity } from '@/lib/activity-logger';
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -26,6 +29,14 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       actif: body?.actif !== false,
     }, { new: true });
     if (!compte) return NextResponse.json({ success: false, error: 'Compte introuvable' }, { status: 404 });
+
+    const sessionPut = await getServerSession(authOptions);
+    await logActivity('Compte modifié', `${compte.nom} (${compte.devise})`, {
+      id: (sessionPut?.user as any)?.id,
+      name: sessionPut?.user?.name || '',
+      role: (sessionPut?.user as any)?.role
+    });
+
     return NextResponse.json({ success: true, data: compte });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -36,7 +47,15 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   try {
     const { id } = await context.params;
     await dbConnect();
-    await Compte.findByIdAndUpdate(id, { actif: false });
+    const deleted = await Compte.findByIdAndUpdate(id, { actif: false }, { new: false });
+
+    const sessionDel = await getServerSession(authOptions);
+    await logActivity('Compte désactivé', `${deleted?.nom || id}`, {
+      id: (sessionDel?.user as any)?.id,
+      name: sessionDel?.user?.name || '',
+      role: (sessionDel?.user as any)?.role
+    });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
