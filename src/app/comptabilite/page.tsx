@@ -157,6 +157,10 @@ function formatPdfCurrency(value: number) {
   return sanitizePdfText(formatCurrencyFCFA(value));
 }
 
+function formatPdfNumber(value: number) {
+  return sanitizePdfText(formatNumber(value));
+}
+
 function buildExportDateLabel() {
   const now = new Date();
   return `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -687,6 +691,7 @@ export default function ComptabilitePage() {
         type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
         'Qté',
         'PU',
+        'Devise',
         TX_TYPE_CONFIG[type].partyLabel,
         'Débit',
         'Crédit',
@@ -698,12 +703,13 @@ export default function ComptabilitePage() {
         return [
           sanitizePdfText(normalizeDate(item.date)),
           sanitizePdfText(item.description),
-          sanitizePdfText(item.quantite || ''),
-          sanitizePdfText(`${formatNumber(item.prixUnitaire || 0)} ${item.txCurrency || 'FCFA'}`),
+          formatPdfNumber(item.quantite || 0),
+          formatPdfNumber(item.prixUnitaire || 0),
+          sanitizePdfText(item.txCurrency || 'FCFA'),
           sanitizePdfText(item.tiers || ''),
           sanitizePdfText(debit?.nom || ''),
           sanitizePdfText(credit?.nom || ''),
-          formatPdfCurrency(item.amountFCFA || 0),
+          formatPdfNumber(item.amountFCFA || 0),
         ];
       }),
       styles: {
@@ -725,13 +731,14 @@ export default function ComptabilitePage() {
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
         0: { cellWidth: 66 },
-        1: { cellWidth: 170 },
+        1: { cellWidth: 150 },
         2: { halign: 'right', cellWidth: 42 },
-        3: { halign: 'right', cellWidth: 74 },
-        4: { cellWidth: 96 },
-        5: { cellWidth: 110 },
-        6: { cellWidth: 110 },
-        7: { halign: 'right', cellWidth: 86 },
+        3: { halign: 'right', cellWidth: 68 },
+        4: { halign: 'left', cellWidth: 56 },
+        5: { cellWidth: 98 },
+        6: { cellWidth: 98 },
+        7: { cellWidth: 98 },
+        8: { halign: 'right', cellWidth: 68 },
       },
       theme: 'striped',
     });
@@ -757,12 +764,12 @@ export default function ComptabilitePage() {
         return [
           sanitizePdfText(normalizeDate(item.date)),
           sanitizePdfText(item.type),
-          sanitizePdfText(item.quantite || 1),
-          sanitizePdfText(formatCurrencyFCFA(item.montantUnitaire || 0)),
+          formatPdfNumber(item.quantite || 1),
+          formatPdfNumber(item.montantUnitaire || 0),
           sanitizePdfText(debit?.nom || ''),
           sanitizePdfText(credit?.nom || ''),
           sanitizePdfText(item.operateur),
-          formatPdfCurrency(item.montant || 0),
+          formatPdfNumber(item.montant || 0),
         ];
       }),
       styles: {
@@ -813,9 +820,9 @@ export default function ComptabilitePage() {
       body: displayAccounts.map((account) => [
         sanitizePdfText(account.nom),
         sanitizePdfText(account.devise || 'FCFA'),
-        sanitizePdfText(formatNumber(account.tauxFCFA || 1)),
-        formatPdfCurrency(account.soldeCalculeFCFA || 0),
-        sanitizePdfText(`${formatNumber(account.equivalentUnits || 0)} ${account.devise || 'FCFA'}`),
+        formatPdfNumber(account.tauxFCFA || 1),
+        formatPdfNumber(account.soldeCalculeFCFA || 0),
+        formatPdfNumber(account.equivalentUnits || 0),
       ]),
       styles: {
         fontSize: 9,
