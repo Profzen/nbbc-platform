@@ -85,7 +85,7 @@ const EMPTY_TX_FORM: TxFormState = {
   quantite: '1',
   prixUnitaire: '0',
   montant: '0',
-  txCurrency: 'USD',
+  txCurrency: 'FCFA',
   accountDebitId: '',
   accountCreditId: '',
   tiers: '',
@@ -126,8 +126,8 @@ const SECTION_META: Record<SectionId, { label: string; icon: any }> = {
 };
 
 const TX_TYPE_CONFIG: Record<AccountingTransactionType, { label: string; partyLabel: string; defaultCurrency: string }> = {
-  ACHAT: { label: 'Achat', partyLabel: 'Fournisseur', defaultCurrency: 'USD' },
-  VENTE: { label: 'Vente', partyLabel: 'Client', defaultCurrency: 'USD' },
+  ACHAT: { label: 'Achat', partyLabel: 'Fournisseur', defaultCurrency: 'FCFA' },
+  VENTE: { label: 'Vente', partyLabel: 'Client', defaultCurrency: 'FCFA' },
   DEPENSE: { label: 'Dépense', partyLabel: 'Bénéficiaire', defaultCurrency: 'FCFA' },
   DETTE: { label: 'Dette', partyLabel: 'Créancier', defaultCurrency: 'FCFA' },
 };
@@ -684,41 +684,52 @@ export default function ComptabilitePage() {
     }
   };
 
+  const filterEmptyColumns = (head: string[], body: string[][]) => {
+    const nonEmpty = head.map((_, i) => body.some(row => (row[i] || '').trim() !== ''));
+    const filteredHead = head.filter((_, i) => nonEmpty[i]);
+    const filteredBody = body.map(row => row.filter((_, i) => nonEmpty[i]));
+    return { head: filteredHead, body: filteredBody };
+  };
+
   const exportTransactionsPdf = (type: AccountingTransactionType) => {
     const list = summary.transactions.filter((item) => item.type === type);
     const doc = createPdfReport(`Rapport ${TX_TYPE_CONFIG[type].label}s`, `${list.length} ligne(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
+    const rawHead = [
+      'Date',
+      type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
+      'Qté',
+      'PU (FCFA)',
+      TX_TYPE_CONFIG[type].partyLabel,
+      'Débit',
+      'Crédit',
+      'Total FCFA',
+    ];
+    const rawBody = list.map((item) => {
+      const debit = accountById(getAccountId(item.accountDebitId));
+      const credit = accountById(getAccountId(item.accountCreditId));
+      return [
+        sanitizePdfText(normalizeDate(item.date)),
+        sanitizePdfText(item.description),
+        formatPdfNumber(item.quantite || 0),
+        formatPdfNumber(item.prixUnitaire || 0),
+        sanitizePdfText(item.tiers || ''),
+        sanitizePdfText(debit?.nom || ''),
+        sanitizePdfText(credit?.nom || ''),
+        formatPdfNumber(item.amountFCFA || 0),
+      ];
+    });
+    const { head: fHead, body: fBody } = filterEmptyColumns(rawHead, rawBody);
+    const colCount = fHead.length;
+    const numericHeaders = new Set(['Qté', 'PU (FCFA)', 'Total FCFA']);
+
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
       tableWidth,
-      head: [[
-        'Date',
-        type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
-        'Qté',
-        'PU',
-        'Devise',
-        TX_TYPE_CONFIG[type].partyLabel,
-        'Débit',
-        'Crédit',
-        'Total FCFA',
-      ]],
-      body: list.map((item) => {
-        const debit = accountById(getAccountId(item.accountDebitId));
-        const credit = accountById(getAccountId(item.accountCreditId));
-        return [
-          sanitizePdfText(normalizeDate(item.date)),
-          sanitizePdfText(item.description),
-          formatPdfNumber(item.quantite || 0),
-          formatPdfNumber(item.prixUnitaire || 0),
-          sanitizePdfText(item.txCurrency || 'FCFA'),
-          sanitizePdfText(item.tiers || ''),
-          sanitizePdfText(debit?.nom || ''),
-          sanitizePdfText(credit?.nom || ''),
-          formatPdfNumber(item.amountFCFA || 0),
-        ];
-      }),
+      head: [fHead],
+      body: fBody,
       styles: {
         fontSize: 8,
         cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
@@ -742,21 +753,16 @@ export default function ComptabilitePage() {
       didParseCell: (data) => {
         if (data.section === 'head') {
           const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
-          if (isNumericHeader(headerText)) {
+          if (numericHeaders.has(headerText) || isNumericHeader(headerText)) {
             data.cell.styles.halign = 'center';
           }
         }
-      },
-      columnStyles: {
-        0: { cellWidth: 60 },
-        1: { cellWidth: 130 },
-        2: { halign: 'right', cellWidth: 36 },
-        3: { halign: 'right', cellWidth: 58 },
-        4: { halign: 'left', cellWidth: 46 },
-        5: { cellWidth: 86 },
-        6: { cellWidth: 86 },
-        7: { cellWidth: 86 },
-        8: { halign: 'right', cellWidth: 62 },
+        if (data.section === 'body') {
+          const h = fHead[data.column.index];
+          if (h && (numericHeaders.has(h) || isNumericHeader(h))) {
+            data.cell.styles.halign = 'center';
+          }
+        }
       },
       tableLineWidth: 0.35,
       tableLineColor: [203, 213, 225],
@@ -775,25 +781,30 @@ export default function ComptabilitePage() {
     const doc = createPdfReport('Rapport Depots / Retraits', `${summary.depots.length} operation(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
+    const depRawHead = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
+    const depRawBody = summary.depots.map((item) => {
+      const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+      const credit = accountById(getAccountId(item.compteCreditId));
+      return [
+        sanitizePdfText(normalizeDate(item.date)),
+        sanitizePdfText(item.type),
+        formatPdfNumber(item.quantite || 1),
+        formatPdfNumber(item.montantUnitaire || 0),
+        sanitizePdfText(debit?.nom || ''),
+        sanitizePdfText(credit?.nom || ''),
+        sanitizePdfText(item.operateur),
+        formatPdfNumber(item.montant || 0),
+      ];
+    });
+    const { head: depHead, body: depBody } = filterEmptyColumns(depRawHead, depRawBody);
+    const depNumericHeaders = new Set(['Qté', 'Montant unitaire (FCFA)', 'Total FCFA']);
+
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
       tableWidth,
-      head: [['Date', 'Type', 'Qté', 'Montant unitaire', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA']],
-      body: summary.depots.map((item) => {
-        const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
-        const credit = accountById(getAccountId(item.compteCreditId));
-        return [
-          sanitizePdfText(normalizeDate(item.date)),
-          sanitizePdfText(item.type),
-          formatPdfNumber(item.quantite || 1),
-          formatPdfNumber(item.montantUnitaire || 0),
-          sanitizePdfText(debit?.nom || ''),
-          sanitizePdfText(credit?.nom || ''),
-          sanitizePdfText(item.operateur),
-          formatPdfNumber(item.montant || 0),
-        ];
-      }),
+      head: [depHead],
+      body: depBody,
       styles: {
         fontSize: 8,
         cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
@@ -817,20 +828,16 @@ export default function ComptabilitePage() {
       didParseCell: (data) => {
         if (data.section === 'head') {
           const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
-          if (isNumericHeader(headerText)) {
+          if (depNumericHeaders.has(headerText) || isNumericHeader(headerText)) {
             data.cell.styles.halign = 'center';
           }
         }
-      },
-      columnStyles: {
-        0: { cellWidth: 66 },
-        1: { cellWidth: 56 },
-        2: { halign: 'right', cellWidth: 38 },
-        3: { halign: 'right', cellWidth: 78 },
-        4: { cellWidth: 112 },
-        5: { cellWidth: 112 },
-        6: { cellWidth: 84 },
-        7: { halign: 'right', cellWidth: 86 },
+        if (data.section === 'body') {
+          const h = depHead[data.column.index];
+          if (h && (depNumericHeaders.has(h) || isNumericHeader(h))) {
+            data.cell.styles.halign = 'center';
+          }
+        }
       },
       tableLineWidth: 0.35,
       tableLineColor: [203, 213, 225],
@@ -849,18 +856,22 @@ export default function ComptabilitePage() {
     const doc = createPdfReport('Rapport Comptes', `${displayAccounts.length} compte(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
+    const cptRawHead = ['Libellé', 'Taux (1 -> FCFA)', 'Equiv. unités', 'Solde FCFA'];
+    const cptRawBody = displayAccounts.map((account) => [
+      sanitizePdfText(account.nom),
+      formatPdfNumber(account.tauxFCFA || 1),
+      formatPdfNumber(account.equivalentUnits || 0),
+      formatPdfNumber(account.soldeCalculeFCFA || 0),
+    ]);
+    const { head: cptHead, body: cptBody } = filterEmptyColumns(cptRawHead, cptRawBody);
+    const cptNumericHeaders = new Set(['Taux (1 -> FCFA)', 'Equiv. unités', 'Solde FCFA']);
+
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
       tableWidth,
-      head: [['Libellé', 'Devise', 'Taux (1 -> FCFA)', 'Solde FCFA', 'Equiv. unités']],
-      body: displayAccounts.map((account) => [
-        sanitizePdfText(account.nom),
-        sanitizePdfText(account.devise || 'FCFA'),
-        formatPdfNumber(account.tauxFCFA || 1),
-        formatPdfNumber(account.soldeCalculeFCFA || 0),
-        formatPdfNumber(account.equivalentUnits || 0),
-      ]),
+      head: [cptHead],
+      body: cptBody,
       styles: {
         fontSize: 8,
         cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
@@ -884,17 +895,16 @@ export default function ComptabilitePage() {
       didParseCell: (data) => {
         if (data.section === 'head') {
           const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
-          if (isNumericHeader(headerText)) {
+          if (cptNumericHeaders.has(headerText) || isNumericHeader(headerText)) {
             data.cell.styles.halign = 'center';
           }
         }
-      },
-      columnStyles: {
-        0: { cellWidth: 210 },
-        1: { cellWidth: 72 },
-        2: { halign: 'right', cellWidth: 112 },
-        3: { halign: 'right', cellWidth: 102 },
-        4: { halign: 'right', cellWidth: 122 },
+        if (data.section === 'body') {
+          const h = cptHead[data.column.index];
+          if (h && (cptNumericHeaders.has(h) || isNumericHeader(h))) {
+            data.cell.styles.halign = 'center';
+          }
+        }
       },
       tableLineWidth: 0.35,
       tableLineColor: [203, 213, 225],
