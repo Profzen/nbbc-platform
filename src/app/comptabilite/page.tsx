@@ -682,11 +682,12 @@ export default function ComptabilitePage() {
   const exportTransactionsPdf = (type: AccountingTransactionType) => {
     const list = summary.transactions.filter((item) => item.type === type);
     const doc = createPdfReport(`Rapport ${TX_TYPE_CONFIG[type].label}s`, `${list.length} ligne(s)`);
+    const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
-      tableWidth: 'auto',
+      tableWidth,
       head: [[
         'Date',
         type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
@@ -729,6 +730,8 @@ export default function ComptabilitePage() {
         fontSize: 8,
         halign: 'left',
         valign: 'middle',
+        lineWidth: 0.6,
+        lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -742,7 +745,9 @@ export default function ComptabilitePage() {
         7: { cellWidth: 86 },
         8: { halign: 'right', cellWidth: 62 },
       },
-      theme: 'striped',
+      tableLineWidth: 0.35,
+      tableLineColor: [203, 213, 225],
+      theme: 'grid',
     });
     const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120;
     doc.setFont('helvetica', 'bold');
@@ -755,11 +760,12 @@ export default function ComptabilitePage() {
 
   const exportDepotsPdf = () => {
     const doc = createPdfReport('Rapport Depots / Retraits', `${summary.depots.length} operation(s)`);
+    const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
-      tableWidth: 'auto',
+      tableWidth,
       head: [['Date', 'Type', 'Qté', 'Montant unitaire', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA']],
       body: summary.depots.map((item) => {
         const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
@@ -791,6 +797,8 @@ export default function ComptabilitePage() {
         fontSize: 8,
         halign: 'left',
         valign: 'middle',
+        lineWidth: 0.6,
+        lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -803,7 +811,9 @@ export default function ComptabilitePage() {
         6: { cellWidth: 84 },
         7: { halign: 'right', cellWidth: 86 },
       },
-      theme: 'striped',
+      tableLineWidth: 0.35,
+      tableLineColor: [203, 213, 225],
+      theme: 'grid',
     });
     const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120;
     doc.setFont('helvetica', 'bold');
@@ -816,11 +826,12 @@ export default function ComptabilitePage() {
 
   const exportComptesPdf = () => {
     const doc = createPdfReport('Rapport Comptes', `${displayAccounts.length} compte(s)`);
+    const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     autoTable(doc, {
       startY: 92,
       margin: { left: 24, right: 24, bottom: 34 },
-      tableWidth: 'auto',
+      tableWidth,
       head: [['Libellé', 'Devise', 'Taux (1 -> FCFA)', 'Solde FCFA', 'Equiv. unités']],
       body: displayAccounts.map((account) => [
         sanitizePdfText(account.nom),
@@ -845,6 +856,8 @@ export default function ComptabilitePage() {
         fontSize: 8,
         halign: 'left',
         valign: 'middle',
+        lineWidth: 0.6,
+        lineColor: [30, 64, 175],
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -854,7 +867,9 @@ export default function ComptabilitePage() {
         3: { halign: 'right', cellWidth: 102 },
         4: { halign: 'right', cellWidth: 122 },
       },
-      theme: 'striped',
+      tableLineWidth: 0.35,
+      tableLineColor: [203, 213, 225],
+      theme: 'grid',
     });
     let y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120) + 20;
     doc.setFont('helvetica', 'bold');
