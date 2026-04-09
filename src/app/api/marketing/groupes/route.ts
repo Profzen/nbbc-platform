@@ -3,11 +3,15 @@ import dbConnect from '@/lib/mongodb';
 import GroupeClient from '@/models/GroupeClient';
 
 export async function GET() {
-  await dbConnect();
-  const groupes = await GroupeClient.find({})
-    .populate('clientIds', 'nom prenom email telephone typeClient')
-    .sort({ createdAt: -1 });
-  return NextResponse.json({ success: true, data: groupes });
+  try {
+    await dbConnect();
+    const groupes = await GroupeClient.find({})
+      .populate('clientIds', 'nom prenom email telephone typeClient')
+      .sort({ createdAt: -1 });
+    return NextResponse.json({ success: true, data: groupes });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

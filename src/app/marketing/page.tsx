@@ -129,9 +129,14 @@ export default function MarketingPage() {
 
   const fetchGroupes = useCallback(async () => {
     setLoadingGroupes(true);
-    const res = await fetch('/api/marketing/groupes');
-    const data = await res.json();
-    if (data.success) setGroupes(data.data);
+    try {
+      const res = await fetch('/api/marketing/groupes');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.success) setGroupes(data.data);
+    } catch (e) {
+      console.error('Erreur chargement groupes:', e);
+    }
     setLoadingGroupes(false);
   }, []);
 
