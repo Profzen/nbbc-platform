@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { ShieldCheck, Lock } from "lucide-react";
 
 export default function LoginPage() {
@@ -41,7 +40,7 @@ export default function LoginPage() {
         
         <div className="text-center mb-8 mt-2">
           <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner overflow-hidden">
-            <Image src="/nbbcl.png" alt="Logo NBBC" width={48} height={48} className="object-contain" priority />
+            <img src="/nbbcl.png" alt="Logo NBBC" width={48} height={48} className="object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Espace Sécurisé NBBC</h1>
           <p className="text-slate-500 text-sm mt-2">Connectez-vous pour accéder à votre tableau de bord</p>
