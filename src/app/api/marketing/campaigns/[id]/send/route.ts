@@ -61,6 +61,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   campaign.nombreDestinataires = clients.length;
   let envoyes = 0;
   let echecs = 0;
+  const errors: string[] = [];
 
   // Récupérer les IDs de clients pour les logs
   const clientMap = new Map<string, string>();
@@ -100,7 +101,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       await log.save();
 
       if (result.success) envoyes++;
-      else echecs++;
+      else { echecs++; errors.push(`${client.email || client.telephone}: ${result.error}`); }
     }));
 
     // Pause de 300 ms entre les batches pour respecter les limites SMTP
@@ -124,7 +125,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   return NextResponse.json({
     success: true,
-    data: { envoyes, echecs, total: clients.length }
+    data: { envoyes, echecs, total: clients.length, errors: errors.slice(0, 10) }
   });
   } catch (error: any) {
     console.error('[POST /api/marketing/campaigns/send] ERROR:', error);

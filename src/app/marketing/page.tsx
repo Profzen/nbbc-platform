@@ -812,7 +812,15 @@ export default function MarketingPage() {
             <button onClick={() => setSendResult(null)} className="text-slate-400 hover:text-slate-600 ml-4"><X size={16} /></button>
           </div>
           {sendResult.success
-            ? <p className="text-emerald-700 text-sm">{sendResult.data?.envoyes} envoyé(s) · {sendResult.data?.echecs} échec(s) sur {sendResult.data?.total} destinataires.</p>
+            ? <>
+                <p className="text-emerald-700 text-sm">{sendResult.data?.envoyes} envoyé(s) · {sendResult.data?.echecs} échec(s) sur {sendResult.data?.total} destinataires.</p>
+                {sendResult.data?.errors?.length > 0 && (
+                  <div className="mt-2 text-xs text-rose-600 bg-rose-50 rounded-lg p-2 max-h-32 overflow-y-auto">
+                    <p className="font-semibold mb-1">Détails des échecs :</p>
+                    {sendResult.data.errors.map((e: string, i: number) => <p key={i}>• {e}</p>)}
+                  </div>
+                )}
+              </>
             : <p className="text-rose-600 text-sm">{sendResult.error}</p>
           }
         </div>

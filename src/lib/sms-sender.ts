@@ -16,8 +16,23 @@ type SmsSendResult =
 
 const KINGSMS_ENDPOINT = process.env.KINGSMS_API_BASE || 'https://edok-api.kingsmspro.com/api/v1/sms/send';
 
+/** Indicatif pays par défaut (Togo = 228). Configurable via KINGSMS_DEFAULT_COUNTRY */
+const DEFAULT_COUNTRY = process.env.KINGSMS_DEFAULT_COUNTRY || '228';
+
+/**
+ * Normalise un numéro au format international sans + ni 00.
+ * Ex: +228 90 44 36 79 → 22890443679
+ * Ex: 90443679 → 22890443679 (ajout indicatif par défaut)
+ */
 function normalizePhone(input: string): string {
-  return (input || '').trim().replace(/[^\d+]/g, '');
+  let phone = (input || '').trim().replace(/[\s\-().]/g, '');
+  // Retirer le + ou 00 initial
+  phone = phone.replace(/^\+/, '').replace(/^00/, '');
+  // Si le numéro fait 8 chiffres (format local togolais) ou commence par 9/7 et fait 8 chiffres, ajouter indicatif
+  if (/^\d{8}$/.test(phone)) {
+    phone = DEFAULT_COUNTRY + phone;
+  }
+  return phone;
 }
 
 function isKingSmsConfigured(): boolean {
@@ -42,17 +57,17 @@ async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResul
     return { success: false, skipped: true, provider: 'KINGSMS', error: 'Provider KingSMS non configure' };
   }
 
-  if (!/^\d{7,15}$/.test(normalizedTo)) {
-    return { success: false, skipped: false, provider: 'KINGSMS', error: 'Numero invalide pour KingSMS' };
+  if (!/^\d{10,15}$/.test(normalizedTo)) {
+    return { success: false, skipped: false, provider: 'KINGSMS', error: `Numero invalide: ${normalizedTo} (attendu: format international 10-15 chiffres)` };
   }
 
-  const payload = {
-    from: sender,
-    to: normalizedTo,
-    message: body,
-    type: 0,
-    dlr: 'yes',
-  };
+  // KingSMS attend du form-data (comme curl CURLOPT_POSTFIELDS), pas du JSON
+  const formData = new URLSearchParams();
+  formData.append('from', sender);
+  formData.append('to', normalizedTo);
+  formData.append('message', body);
+  formData.append('type', '0');
+  formData.append('dlr', 'yes');
 
   let lastError: string | undefined;
   const maxAttempts = 2;
@@ -64,9 +79,8 @@ async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResul
         headers: {
           APIKEY: apiKey,
           CLIENTID: clientId,
-          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       const rawText = await response.text();
@@ -83,7 +97,11 @@ async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResul
       }
 
       if (!response.ok) {
-        lastError = parsed?.message || parsed?.error || `Erreur KingSMS HTTP ${response.status}`;
+        // Extraire le message d'erreur de la réponse
+        const errMsg = typeof parsed === 'string' ? parsed
+          : parsed?.from?.[0] || parsed?.to?.[0] || parsed?.message || parsed?.error
+          || JSON.stringify(parsed);
+        lastError = `KingSMS HTTP ${response.status}: ${errMsg}`;
         if (attempt < maxAttempts) {
           await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
           continue;
@@ -91,7 +109,15 @@ async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResul
         return { success: false, skipped: false, provider: 'KINGSMS', error: lastError };
       }
 
-      const messageId = parsed?.data?.id || parsed?.message_id || parsed?.id;
+      // Réponse KingSMS en cas de succès (HTTP 201):
+      // { successful_sends: [{ messageId, from, to, ... }], failed_sends: [...], successful_count, failed_count }
+      // OU format simple: { messageId, sender, to, status }
+      if (parsed?.failed_sends?.length > 0 && parsed?.successful_count === 0) {
+        const failError = parsed.failed_sends[0]?.error || 'Echec envoi KingSMS';
+        return { success: false, skipped: false, provider: 'KINGSMS', error: failError };
+      }
+
+      const messageId = parsed?.successful_sends?.[0]?.messageId || parsed?.messageId || parsed?.message_id || parsed?.id;
       return { success: true, provider: 'KINGSMS', messageId: messageId ? String(messageId) : undefined };
     } catch (err: any) {
       lastError = err?.message || 'Erreur reseau KingSMS';
