@@ -68,15 +68,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const allClients = await Client.find({ email: { $in: clients.map(c => c.email) } }).select('_id email');
   allClients.forEach(c => clientMap.set(c.email, c._id.toString()));
 
-  // Envoi séquentiel par batch pour ne pas saturer le serveur SMTP
-  // Gmail: max 500/jour (gratuit) ou 2000/jour (Workspace)
-  // On envoie par batch de 3 avec 1s de pause pour rester safe
-  const BATCH = 3;
+  // Envoi par batch parallèle pour maximiser le débit
+  // Gmail free: ~20/min (500/jour) | Workspace: ~80/min (2000/jour)
+  // Batch de 5 en parallèle + 3s pause → ~60-80/min → ~4000/heure
+  const BATCH = 5;
   for (let i = 0; i < clients.length; i += BATCH) {
     const batch = clients.slice(i, i + BATCH);
 
-    // Envoi séquentiel dans chaque batch (un par un) pour éviter les rejets
-    for (const client of batch) {
+    await Promise.allSettled(batch.map(async (client) => {
       const personalizedText = campaign.contenu
         .replace(/\{\{nom\}\}/g, client.nom || '')
         .replace(/\{\{prenom\}\}/g, client.prenom || '')
@@ -105,11 +104,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       if (result.success) envoyes++;
       else { echecs++; errors.push(`${client.email || client.telephone}: ${result.error}`); }
-    }
+    }));
 
-    // Pause de 1s entre les batches pour respecter les limites SMTP/Gmail
+    // 3s entre les batches — reste sous la limite Gmail (~20/min free, ~80/min Workspace)
     if (i + BATCH < clients.length) {
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 
