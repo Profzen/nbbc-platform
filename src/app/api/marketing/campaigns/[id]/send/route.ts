@@ -11,6 +11,7 @@ import { authOptions } from '@/lib/auth';
 import { logActivity } from '@/lib/activity-logger';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
   const { id } = await context.params;
   await dbConnect();
 
@@ -125,6 +126,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     success: true,
     data: { envoyes, echecs, total: clients.length }
   });
+  } catch (error: any) {
+    console.error('[POST /api/marketing/campaigns/send] ERROR:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Erreur serveur' }, { status: 500 });
+  }
 }
 
 function wrapTemplate(content: string, title: string): string {

@@ -238,9 +238,14 @@ export default function MarketingPage() {
   const sendCamp = async (id: string) => {
     if (!confirm('Envoyer cette campagne maintenant à tous les destinataires ?')) return;
     setSending(id); setSendResult(null);
-    const res = await fetch(`/api/marketing/campaigns/${id}/send`, { method: 'POST' });
-    const data = await res.json();
-    setSendResult(data); setSending(null); fetchCampaigns();
+    try {
+      const res = await fetch(`/api/marketing/campaigns/${id}/send`, { method: 'POST' });
+      const data = await res.json();
+      setSendResult(data);
+    } catch (e: any) {
+      setSendResult({ success: false, error: e.message || 'Erreur réseau' });
+    }
+    setSending(null); fetchCampaigns();
   };
 
   const toggleDestinataire = (cid: string) => {
