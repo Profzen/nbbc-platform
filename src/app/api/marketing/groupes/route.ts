@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import GroupeClient from '@/models/GroupeClient';
+import '@/models/Client';
 
 export async function GET() {
   try {
@@ -10,7 +11,8 @@ export async function GET() {
       .sort({ createdAt: -1 });
     return NextResponse.json({ success: true, data: groupes });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('[GET /api/marketing/groupes] ERROR:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Erreur serveur' }, { status: 500 });
   }
 }
 

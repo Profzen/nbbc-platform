@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import SignatureRequest from '@/models/SignatureRequest';
+import '@/models/Client';
 
 // POPULATE pour récupérer info du client et détails du modèle lors de l'affichage en admin
 export async function GET() {

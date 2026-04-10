@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Carte from '@/models/Carte';
+import '@/models/Client';
 
 // GET : Lister les comptes (optionnel: filtrer par clientId)
 export async function GET(request: Request) {

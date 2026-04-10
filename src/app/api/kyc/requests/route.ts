@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import KycRequest from '@/models/KycRequest';
+import '@/models/Client';
 
 export async function GET(request: Request) {
   await dbConnect();

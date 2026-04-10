@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import SignatureRequest from '@/models/SignatureRequest';
+import '@/models/Client';
 
 export async function GET(request: Request, context: { params: Promise<{ token: string }> }) {
   try {
