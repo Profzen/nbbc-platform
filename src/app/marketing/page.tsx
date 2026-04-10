@@ -79,12 +79,18 @@ export default function MarketingPage() {
   const [sending, setSending] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [savingCamp, setSavingCamp] = useState(false);
+  const [deletingCamp, setDeletingCamp] = useState<string | null>(null);
+  const [openingCamp, setOpeningCamp] = useState(false);
 
   // --- État groupes
   const [groupes, setGroupes] = useState<Groupe[]>([]);
   const [loadingGroupes, setLoadingGroupes] = useState(true);
   const [showGroupeModal, setShowGroupeModal] = useState(false);
   const [editGroupe, setEditGroupe] = useState<Groupe | null>(null);
+  const [savingGroupe, setSavingGroupe] = useState(false);
+  const [deletingGroupe, setDeletingGroupe] = useState<string | null>(null);
+  const [openingGroupe, setOpeningGroupe] = useState(false);
 
   // --- Tous les clients (lazy)
   const [allClients, setAllClients] = useState<Client[]>([]);
@@ -169,45 +175,55 @@ export default function MarketingPage() {
 
   // ─── Campagne helpers ───────────────────────────────────────────────────────
   const openNewCamp = useCallback(async () => {
-    await loadClients();
-    setCampForm({ titre: '', sujet: '', contenu: '', canal: 'EMAIL', cibleType: 'TOUS', cible: 'TOUS', groupeIds: [], destinataireIds: [], isScheduled: false, scheduledAt: '' });
-    setClientSearch('');
-    setShowPreview(false);
-    setShowSaveTemplate(false);
-    setTemplateNom('');
-    setTemplateCategorie('');
-    setEditCamp(null);
-    setShowCampModal(true);
+    setOpeningCamp(true);
+    try {
+      await loadClients();
+      setCampForm({ titre: '', sujet: '', contenu: '', canal: 'EMAIL', cibleType: 'TOUS', cible: 'TOUS', groupeIds: [], destinataireIds: [], isScheduled: false, scheduledAt: '' });
+      setClientSearch('');
+      setShowPreview(false);
+      setShowSaveTemplate(false);
+      setTemplateNom('');
+      setTemplateCategorie('');
+      setEditCamp(null);
+      setShowCampModal(true);
+    } finally { setOpeningCamp(false); }
   }, [loadClients]);
 
   const openEditCamp = async (c: any) => {
-    await loadClients();
-    setCampForm({
-      titre: c.titre, sujet: c.sujet, contenu: c.contenu, canal: c.canal || 'EMAIL',
-      cibleType: c.cibleType || 'TOUS', cible: c.cible || 'TOUS',
-      groupeIds: c.groupeIds || [], destinataireIds: c.destinataireIds || [],
-      isScheduled: c.isScheduled || false,
-      scheduledAt: c.scheduledAt ? new Date(c.scheduledAt).toISOString().slice(0, 16) : '',
-    });
-    setClientSearch('');
-    setShowPreview(false);
-    setShowSaveTemplate(false);
-    setTemplateNom('');
-    setTemplateCategorie('');
-    setEditCamp(c);
-    setShowCampModal(true);
+    setOpeningCamp(true);
+    try {
+      await loadClients();
+      setCampForm({
+        titre: c.titre, sujet: c.sujet, contenu: c.contenu, canal: c.canal || 'EMAIL',
+        cibleType: c.cibleType || 'TOUS', cible: c.cible || 'TOUS',
+        groupeIds: c.groupeIds || [], destinataireIds: c.destinataireIds || [],
+        isScheduled: c.isScheduled || false,
+        scheduledAt: c.scheduledAt ? new Date(c.scheduledAt).toISOString().slice(0, 16) : '',
+      });
+      setClientSearch('');
+      setShowPreview(false);
+      setShowSaveTemplate(false);
+      setTemplateNom('');
+      setTemplateCategorie('');
+      setEditCamp(c);
+      setShowCampModal(true);
+    } finally { setOpeningCamp(false); }
   };
 
   const saveCamp = async () => {
-    const payload = {
-      ...campForm,
-      scheduledAt: campForm.isScheduled && campForm.scheduledAt ? new Date(campForm.scheduledAt).toISOString() : null,
-    };
-    const url = editCamp ? `/api/marketing/campaigns/${editCamp._id}` : '/api/marketing/campaigns';
-    const method = editCamp ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (data.success) { setShowCampModal(false); fetchCampaigns(); }
+    setSavingCamp(true);
+    try {
+      const payload = {
+        ...campForm,
+        sujet: campForm.canal === 'SMS' ? (campForm.sujet || campForm.titre) : campForm.sujet,
+        scheduledAt: campForm.isScheduled && campForm.scheduledAt ? new Date(campForm.scheduledAt).toISOString() : null,
+      };
+      const url = editCamp ? `/api/marketing/campaigns/${editCamp._id}` : '/api/marketing/campaigns';
+      const method = editCamp ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) { setShowCampModal(false); fetchCampaigns(); }
+    } finally { setSavingCamp(false); }
   };
 
   const saveAsTemplate = async () => {
@@ -231,8 +247,11 @@ export default function MarketingPage() {
 
   const deleteCamp = async (id: string) => {
     if (!confirm('Supprimer cette campagne ?')) return;
-    await fetch(`/api/marketing/campaigns/${id}`, { method: 'DELETE' });
-    fetchCampaigns();
+    setDeletingCamp(id);
+    try {
+      await fetch(`/api/marketing/campaigns/${id}`, { method: 'DELETE' });
+      fetchCampaigns();
+    } finally { setDeletingCamp(null); }
   };
 
   const sendCamp = async (id: string) => {
@@ -288,33 +307,45 @@ export default function MarketingPage() {
 
   // ─── Groupe helpers ─────────────────────────────────────────────────────────
   const openNewGroupe = async () => {
-    await loadClients();
-    setGroupeForm({ nom: '', description: '', couleur: '#6366f1', clientIds: [] });
-    setGroupeClientSearch('');
-    setEditGroupe(null);
-    setShowGroupeModal(true);
+    setOpeningGroupe(true);
+    try {
+      await loadClients();
+      setGroupeForm({ nom: '', description: '', couleur: '#6366f1', clientIds: [] });
+      setGroupeClientSearch('');
+      setEditGroupe(null);
+      setShowGroupeModal(true);
+    } finally { setOpeningGroupe(false); }
   };
 
   const openEditGroupe = async (g: Groupe) => {
-    await loadClients();
-    setGroupeForm({ nom: g.nom, description: g.description || '', couleur: g.couleur, clientIds: g.clientIds.map(c => c._id) });
-    setGroupeClientSearch('');
-    setEditGroupe(g);
-    setShowGroupeModal(true);
+    setOpeningGroupe(true);
+    try {
+      await loadClients();
+      setGroupeForm({ nom: g.nom, description: g.description || '', couleur: g.couleur, clientIds: g.clientIds.map(c => c._id) });
+      setGroupeClientSearch('');
+      setEditGroupe(g);
+      setShowGroupeModal(true);
+    } finally { setOpeningGroupe(false); }
   };
 
   const saveGroupe = async () => {
-    const url = editGroupe ? `/api/marketing/groupes/${editGroupe._id}` : '/api/marketing/groupes';
-    const method = editGroupe ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(groupeForm) });
-    const data = await res.json();
-    if (data.success) { setShowGroupeModal(false); fetchGroupes(); }
+    setSavingGroupe(true);
+    try {
+      const url = editGroupe ? `/api/marketing/groupes/${editGroupe._id}` : '/api/marketing/groupes';
+      const method = editGroupe ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(groupeForm) });
+      const data = await res.json();
+      if (data.success) { setShowGroupeModal(false); fetchGroupes(); }
+    } finally { setSavingGroupe(false); }
   };
 
   const deleteGroupe = async (id: string) => {
     if (!confirm('Supprimer ce groupe ? Les clients ne seront pas supprimés.')) return;
-    await fetch(`/api/marketing/groupes/${id}`, { method: 'DELETE' });
-    fetchGroupes();
+    setDeletingGroupe(id);
+    try {
+      await fetch(`/api/marketing/groupes/${id}`, { method: 'DELETE' });
+      fetchGroupes();
+    } finally { setDeletingGroupe(null); }
   };
 
   const toggleGroupeClient = (cid: string) => {
@@ -673,17 +704,20 @@ export default function MarketingPage() {
             </div>
 
             <div className="p-5 border-t border-slate-100 flex gap-3 shrink-0 bg-slate-50/50">
-              <button onClick={() => setShowCampModal(false)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100">Annuler</button>
+              <button onClick={() => setShowCampModal(false)} disabled={savingCamp} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 disabled:opacity-50">Annuler</button>
               <button
                 onClick={saveCamp}
                 disabled={
-                  !campForm.titre || !campForm.sujet || !campForm.contenu ||
+                  savingCamp ||
+                  !campForm.titre || !campForm.contenu ||
+                  (campForm.canal === 'EMAIL' && !campForm.sujet) ||
                   (campForm.cibleType === 'SELECTIONNES' && campForm.destinataireIds.length === 0) ||
                   (campForm.cibleType === 'GROUPES' && campForm.groupeIds.length === 0) ||
                   (campForm.isScheduled && !campForm.scheduledAt)
                 }
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg disabled:opacity-50">
-                {editCamp ? 'Sauvegarder' : campForm.isScheduled ? '⏰ Planifier l\'envoi' : 'Créer la campagne'}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingCamp && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingCamp ? 'Enregistrement...' : editCamp ? 'Sauvegarder' : campForm.isScheduled ? '⏰ Planifier l\'envoi' : 'Créer la campagne'}
               </button>
             </div>
           </div>
@@ -757,10 +791,11 @@ export default function MarketingPage() {
             </div>
 
             <div className="p-5 border-t border-slate-100 flex gap-3 shrink-0 bg-slate-50/50">
-              <button onClick={() => setShowGroupeModal(false)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100">Annuler</button>
-              <button onClick={saveGroupe} disabled={!groupeForm.nom.trim()}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold shadow-lg disabled:opacity-50">
-                {editGroupe ? 'Sauvegarder' : 'Créer le groupe'}
+              <button onClick={() => setShowGroupeModal(false)} disabled={savingGroupe} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 disabled:opacity-50">Annuler</button>
+              <button onClick={saveGroupe} disabled={!groupeForm.nom.trim() || savingGroupe}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingGroupe && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingGroupe ? 'Enregistrement...' : editGroupe ? 'Sauvegarder' : 'Créer le groupe'}
               </button>
             </div>
           </div>
@@ -790,13 +825,15 @@ export default function MarketingPage() {
           <p className="text-slate-500 mt-1 text-sm">Envoi groupé email par type, groupes ou sélection individuelle.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={openNewGroupe}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow transition-all">
-            <FolderOpen size={17} /> Nouveau groupe
+          <button onClick={openNewGroupe} disabled={openingGroupe}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow transition-all disabled:opacity-60">
+            {openingGroupe ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <FolderOpen size={17} />}
+            {openingGroupe ? 'Chargement...' : 'Nouveau groupe'}
           </button>
-          <button onClick={openNewCamp}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-sm shadow-md transition-all">
-            <Plus size={17} /> Nouvelle campagne
+          <button onClick={openNewCamp} disabled={openingCamp}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-sm shadow-md transition-all disabled:opacity-60">
+            {openingCamp ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Plus size={17} />}
+            {openingCamp ? 'Chargement...' : 'Nouvelle campagne'}
           </button>
         </div>
       </header>
@@ -853,8 +890,9 @@ export default function MarketingPage() {
               </div>
               <h3 className="text-lg font-bold text-slate-700">Aucune campagne</h3>
               <p className="text-slate-400 mt-1 mb-5 text-sm">Créez votre première campagne pour communiquer avec vos clients.</p>
-              <button onClick={openNewCamp} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 text-sm">
-                Créer une campagne
+              <button onClick={openNewCamp} disabled={openingCamp} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 text-sm disabled:opacity-60 flex items-center gap-2 mx-auto">
+                {openingCamp && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {openingCamp ? 'Chargement...' : 'Créer une campagne'}
               </button>
             </div>
           ) : campaigns.map(c => (
@@ -894,8 +932,8 @@ export default function MarketingPage() {
 
                 <div className="flex items-center gap-2 shrink-0">
                   {c.statut !== 'ENVOYE' && (
-                    <button onClick={() => openEditCamp(c)} className="p-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-600 text-slate-500 rounded-xl transition-colors" title="Modifier">
-                      <Edit3 size={15} />
+                    <button onClick={() => openEditCamp(c)} disabled={openingCamp} className="p-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-600 text-slate-500 rounded-xl transition-colors disabled:opacity-50" title="Modifier">
+                      {openingCamp ? <span className="w-4 h-4 border-2 border-indigo-400/40 border-t-indigo-600 rounded-full animate-spin" /> : <Edit3 size={15} />}
                     </button>
                   )}
                   {c.statut === 'ENVOYE' && (
@@ -912,8 +950,8 @@ export default function MarketingPage() {
                     </button>
                   )}
                   {c.statut !== 'ENVOYE' && (
-                    <button onClick={() => deleteCamp(c._id)} className="p-2 bg-slate-100 hover:bg-rose-100 hover:text-rose-500 text-slate-400 rounded-xl transition-colors" title="Supprimer">
-                      <Trash2 size={15} />
+                    <button onClick={() => deleteCamp(c._id)} disabled={deletingCamp === c._id} className="p-2 bg-slate-100 hover:bg-rose-100 hover:text-rose-500 text-slate-400 rounded-xl transition-colors disabled:opacity-50" title="Supprimer">
+                      {deletingCamp === c._id ? <span className="w-4 h-4 border-2 border-rose-400/40 border-t-rose-500 rounded-full animate-spin" /> : <Trash2 size={15} />}
                     </button>
                   )}
                 </div>
@@ -936,8 +974,9 @@ export default function MarketingPage() {
               <h3 className="text-lg font-bold text-slate-700">Aucun groupe</h3>
               <p className="text-slate-400 mt-1 mb-5 text-sm">Les groupes permettent de cibler des ensembles précis de clients dans vos campagnes.</p>
               <div className="flex gap-3 flex-wrap justify-center">
-                <button onClick={openNewGroupe} className="bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700 text-sm">
-                  Créer un groupe
+                <button onClick={openNewGroupe} disabled={openingGroupe} className="bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700 text-sm disabled:opacity-60 flex items-center gap-2">
+                  {openingGroupe && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                  {openingGroupe ? 'Chargement...' : 'Créer un groupe'}
                 </button>
                 <button onClick={generateDefaultGroups} disabled={generatingDefaults}
                   className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 text-sm disabled:opacity-60 flex items-center gap-2">
@@ -970,8 +1009,12 @@ export default function MarketingPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 ml-2 shrink-0">
-                      <button onClick={() => openEditGroupe(g)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Edit3 size={14} /></button>
-                      <button onClick={() => deleteGroupe(g._id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                      <button onClick={() => openEditGroupe(g)} disabled={openingGroupe} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50">
+                        {openingGroupe ? <span className="w-3.5 h-3.5 border-2 border-teal-400/40 border-t-teal-600 rounded-full animate-spin" /> : <Edit3 size={14} />}
+                      </button>
+                      <button onClick={() => deleteGroupe(g._id)} disabled={deletingGroupe === g._id} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
+                        {deletingGroupe === g._id ? <span className="w-3.5 h-3.5 border-2 border-rose-400/40 border-t-rose-500 rounded-full animate-spin" /> : <Trash2 size={14} />}
+                      </button>
                     </div>
                   </div>
 

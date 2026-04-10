@@ -31,7 +31,7 @@ export interface ICampaign extends Document {
 const CampaignSchema: Schema = new Schema(
   {
     titre: { type: String, required: true },
-    sujet: { type: String, required: true },
+    sujet: { type: String, default: '' },
     contenu: { type: String, required: true },
     canal: { type: String, enum: ['EMAIL', 'SMS'], default: 'EMAIL' },
     cible: {
