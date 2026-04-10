@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers, X } from 'lucide-react';
+import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers, X, Pencil, Trash2, Save } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -54,12 +54,19 @@ export default function ClientsPage() {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [editClient, setEditClient] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ nom: '', prenom: '', email: '', telephone: '', paysResidence: '', typeClient: '' });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
-  const filteredClients = clients.filter(c => 
-    c.nom?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.prenom?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = clients.filter(c => {
+    const q = searchQuery.toLowerCase();
+    return c.nom?.toLowerCase().includes(q) || 
+      c.prenom?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.telephone?.toLowerCase().includes(q);
+  });
 
   const displayedClients = filteredClients.slice(0, visibleCount);
 
@@ -173,9 +180,72 @@ export default function ClientsPage() {
     }
   };
 
+  const openEdit = (client: any) => {
+    setEditClient(client);
+    setEditForm({
+      nom: client.nom || '',
+      prenom: client.prenom || '',
+      email: client.email || '',
+      telephone: client.telephone || '',
+      paysResidence: client.paysResidence || '',
+      typeClient: client.typeClient || 'PARTICULIER',
+    });
+    setOpenMenuId(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editClient) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/clients/${editClient._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClients(prev => prev.map(c => c._id === editClient._id ? data.data : c));
+        setEditClient(null);
+      } else {
+        alert(data.error || 'Erreur lors de la mise à jour');
+      }
+    } catch {
+      alert('Erreur réseau');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Supprimer ce client ? Cette action est irréversible.')) return;
+    setDeleting(id);
+    setOpenMenuId(null);
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setClients(prev => prev.filter(c => c._id !== id));
+      } else {
+        alert(data.error || 'Erreur lors de la suppression');
+      }
+    } catch {
+      alert('Erreur réseau');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   useEffect(() => {
     fetchClients();
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [openMenuId]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -433,7 +503,7 @@ export default function ClientsPage() {
             <Search size={18} className="text-slate-400" />
             <input
               type="text"
-              placeholder="Rechercher par nom, prénom ou email..."
+              placeholder="Rechercher par nom, prénom, email ou téléphone..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -480,9 +550,34 @@ export default function ClientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-3 text-right">
-                      <button className="p-2 hover:bg-slate-200 rounded-lg transition-colors">
-                        <MoreVertical size={16} className="text-slate-400" />
-                      </button>
+                      <div className="relative inline-block">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === client._id ? null : client._id); }}
+                          className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
+                        >
+                          {deleting === client._id ? (
+                            <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <MoreVertical size={16} className="text-slate-400" />
+                          )}
+                        </button>
+                        {openMenuId === client._id && (
+                          <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEdit(client); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                            >
+                              <Pencil size={14} /> Modifier
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDelete(client._id); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 size={14} /> Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -509,6 +604,57 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+      {/* Modal édition client */}
+      {editClient && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-800">Modifier le client</h2>
+              <button onClick={() => setEditClient(null)} className="p-1 hover:bg-slate-100 rounded-lg"><X size={20} className="text-slate-400" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nom</label>
+                  <input value={editForm.nom} onChange={e => setEditForm({...editForm, nom: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Prénom</label>
+                  <input value={editForm.prenom} onChange={e => setEditForm({...editForm, prenom: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Téléphone</label>
+                <input value={editForm.telephone} onChange={e => setEditForm({...editForm, telephone: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Pays de résidence</label>
+                <input value={editForm.paysResidence} onChange={e => setEditForm({...editForm, paysResidence: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Type de client</label>
+                <select value={editForm.typeClient} onChange={e => setEditForm({...editForm, typeClient: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500">
+                  <option value="PARTICULIER">Particulier</option>
+                  <option value="ENTREPRISE">Entreprise</option>
+                  <option value="INVESTISSEUR">Investisseur</option>
+                  <option value="PARTENAIRE">Partenaire</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-200">
+              <button onClick={() => setEditClient(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium">Annuler</button>
+              <button onClick={handleSaveEdit} disabled={saving} className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-60 flex items-center gap-2">
+                {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save size={16} />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
