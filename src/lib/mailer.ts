@@ -41,8 +41,8 @@ export async function sendMail({ to, subject, html }: SendMailParams) {
       html,
     });
     return { success: true as const, skipped: false as const };
-  } catch (error) {
-    console.error('[MAILER] Echec envoi email:', error);
-    return { success: false as const, skipped: false as const };
+  } catch (error: any) {
+    console.error('[MAILER] Echec envoi email:', error?.message || error);
+    return { success: false as const, skipped: false as const, error: error?.message || 'Erreur SMTP' };
   }
 }

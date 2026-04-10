@@ -68,12 +68,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const allClients = await Client.find({ email: { $in: clients.map(c => c.email) } }).select('_id email');
   allClients.forEach(c => clientMap.set(c.email, c._id.toString()));
 
-  // Envoi séquentiel par batch de 5 pour ne pas saturer le serveur SMTP
-  const BATCH = 5;
+  // Envoi séquentiel par batch pour ne pas saturer le serveur SMTP
+  // Gmail: max 500/jour (gratuit) ou 2000/jour (Workspace)
+  // On envoie par batch de 3 avec 1s de pause pour rester safe
+  const BATCH = 3;
   for (let i = 0; i < clients.length; i += BATCH) {
     const batch = clients.slice(i, i + BATCH);
 
-    await Promise.allSettled(batch.map(async (client) => {
+    // Envoi séquentiel dans chaque batch (un par un) pour éviter les rejets
+    for (const client of batch) {
       const personalizedText = campaign.contenu
         .replace(/\{\{nom\}\}/g, client.nom || '')
         .replace(/\{\{prenom\}\}/g, client.prenom || '')
@@ -102,11 +105,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       if (result.success) envoyes++;
       else { echecs++; errors.push(`${client.email || client.telephone}: ${result.error}`); }
-    }));
+    }
 
-    // Pause de 300 ms entre les batches pour respecter les limites SMTP
+    // Pause de 1s entre les batches pour respecter les limites SMTP/Gmail
     if (i + BATCH < clients.length) {
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
