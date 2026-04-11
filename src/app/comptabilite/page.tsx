@@ -228,6 +228,19 @@ export default function ComptabilitePage() {
   const [showCompteModal, setShowCompteModal] = useState(false);
 
   const [txForm, setTxForm] = useState<TxFormState>(EMPTY_TX_FORM);
+  // Calcul automatique du montant total
+  useEffect(() => {
+    // Ne pas écraser si l'utilisateur a modifié manuellement le montant
+    // On recalcule si quantité ou prix unitaire change
+    const qte = Number(txForm.quantite);
+    const pu = Number(txForm.prixUnitaire);
+    if (!isNaN(qte) && !isNaN(pu)) {
+      const autoTotal = qte * pu;
+      if (Number(txForm.montant) !== autoTotal) {
+        setTxForm((prev) => ({ ...prev, montant: String(autoTotal) }));
+      }
+    }
+  }, [txForm.quantite, txForm.prixUnitaire]);
   const [depotForm, setDepotForm] = useState<DepotFormState>(EMPTY_DEPOT_FORM);
   const [compteForm, setCompteForm] = useState<CompteFormState>(EMPTY_COMPTE_FORM);
 
@@ -1049,7 +1062,7 @@ export default function ComptabilitePage() {
                 <Search size={14} className="text-slate-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full sm:w-52 bg-transparent text-sm outline-none" />
               </div>
-              <button onClick={deleteSelectedTransactions} disabled={selectedTransactionIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
+              <button onClick={deleteSelectedTransactions} disabled={selectedTransactionIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 inline-flex items-center gap-2">{saving && selectedTransactionIds.length > 0 ? <><span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />Suppression...</> : 'Supprimer sélection'}</button>
               <button onClick={() => exportTransactionsPdf(currentSectionType)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
             </div>
           </div>
@@ -1127,7 +1140,7 @@ export default function ComptabilitePage() {
                 <Search size={14} className="text-slate-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full sm:w-52 bg-transparent text-sm outline-none" />
               </div>
-              <button onClick={deleteSelectedDepots} disabled={selectedDepotIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Supprimer sélection</button>
+              <button onClick={deleteSelectedDepots} disabled={selectedDepotIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 inline-flex items-center gap-2">{saving && selectedDepotIds.length > 0 ? <><span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />Suppression...</> : 'Supprimer sélection'}</button>
               <button onClick={exportDepotsPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
             </div>
           </div>
@@ -1204,9 +1217,9 @@ export default function ComptabilitePage() {
                 <div className="text-sm text-slate-400">{displayAccounts.length} libellé(s)</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {displayAccounts.length === 0 && <button onClick={initializeDefaultAccounts} disabled={saving} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Créer comptes de base</button>}
+                {displayAccounts.length === 0 && <button onClick={initializeDefaultAccounts} disabled={saving} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 inline-flex items-center gap-2">{saving ? <><span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />Création...</> : 'Créer comptes de base'}</button>}
                 <button onClick={openNewCompteModal} className="rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md">+ Nouveau libellé</button>
-                <button onClick={resetAllComptes} disabled={displayAccounts.length === 0 || saving} className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50">Réinitialiser tous à 0</button>
+                <button onClick={resetAllComptes} disabled={displayAccounts.length === 0 || saving} className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50 inline-flex items-center gap-2">{saving ? <><span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />Réinit...</> : 'Réinitialiser tous à 0'}</button>
                 <button onClick={exportComptesPdf} disabled={displayAccounts.length === 0} className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50">Exporter PDF Comptes</button>
               </div>
             </div>
@@ -1288,7 +1301,13 @@ export default function ComptabilitePage() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Quantité</label><input type="number" min="0" value={txForm.quantite} onChange={(e) => setTxForm((prev) => ({ ...prev, quantite: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Prix unitaire</label><input type="number" min="0" value={txForm.prixUnitaire} onChange={(e) => setTxForm((prev) => ({ ...prev, prixUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant total</label><input type="number" min="0" value={txForm.montant} onChange={(e) => setTxForm((prev) => ({ ...prev, montant: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant total</label>
+                  <input type="number" min="0" value={txForm.montant}
+                    onChange={(e) => setTxForm((prev) => ({ ...prev, montant: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                    readOnly={true}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit *</label><select value={txForm.accountDebitId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
@@ -1326,7 +1345,14 @@ export default function ComptabilitePage() {
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label><input type="text" value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label>
+                  <select value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <option value="flooz">Flooz</option>
+                    <option value="tmoney">Tmoney</option>
+                    <option value="mtn">MTN</option>
+                  </select>
+                </div>
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               </div>
               <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={depotForm.notes} onChange={(e) => setDepotForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>

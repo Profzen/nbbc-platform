@@ -56,6 +56,9 @@ export default function SignaturesAdminPage() {
   const [clientSearch, setClientSearch] = useState('');
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const [generatingRequest, setGeneratingRequest] = useState(false);
 
   // Nouvellement généré
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
@@ -81,32 +84,40 @@ export default function SignaturesAdminPage() {
 
   // --- Actions Templates ---
   const saveTemplate = async () => {
-    const isEdit = !!templateForm.id;
-    const url = isEdit ? `/api/signatures/templates/${templateForm.id}` : '/api/signatures/templates';
-    const method = isEdit ? 'PUT' : 'POST';
+    setSavingTemplate(true);
+    try {
+      const isEdit = !!templateForm.id;
+      const url = isEdit ? `/api/signatures/templates/${templateForm.id}` : '/api/signatures/templates';
+      const method = isEdit ? 'PUT' : 'POST';
 
-    const res = await fetch(url, {
-      method, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom: templateForm.nom, contenuTexte: templateForm.contenuTexte })
-    });
+      const res = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nom: templateForm.nom, contenuTexte: templateForm.contenuTexte })
+      });
     
-    if (res.ok) {
-      setShowTemplateModal(false);
-      fetchAll();
-    }
+      if (res.ok) {
+        setShowTemplateModal(false);
+        fetchAll();
+      }
+    } finally { setSavingTemplate(false); }
   };
 
   const deleteTemplate = async (id: string) => {
     if(!confirm("Désactiver ce modèle ?")) return;
-    await fetch(`/api/signatures/templates/${id}`, { method: 'DELETE' });
-    fetchAll();
+    setDeletingTemplateId(id);
+    try {
+      await fetch(`/api/signatures/templates/${id}`, { method: 'DELETE' });
+      fetchAll();
+    } finally { setDeletingTemplateId(null); }
   };
 
   // --- Actions Requests ---
   const generateRequest = async () => {
-    const finalClientNom = requestForm.clientId
-      ? undefined
-      : (requestForm.clientNomLibre || clientSearch).trim() || undefined;
+    setGeneratingRequest(true);
+    try {
+      const finalClientNom = requestForm.clientId
+        ? undefined
+        : (requestForm.clientNomLibre || clientSearch).trim() || undefined;
 
     const res = await fetch('/api/signatures/requests/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -131,6 +142,7 @@ export default function SignaturesAdminPage() {
     } else {
       alert("Erreur: " + data.error);
     }
+    } finally { setGeneratingRequest(false); }
   };
 
   const copyLink = (link: string) => {
@@ -321,7 +333,9 @@ export default function SignaturesAdminPage() {
                   
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity absolute top-5 right-5">
                     <button onClick={() => { setTemplateForm({ id: tpl._id, nom: tpl.nom, contenuTexte: tpl.contenuTexte || htmlToEditableText(tpl.contenuHtml || '') }); setShowTemplateModal(true); }} className="p-2 bg-slate-100 text-slate-600 hover:text-indigo-600 rounded-lg"><Edit3 size={16}/></button>
-                    <button onClick={() => deleteTemplate(tpl._id)} className="p-2 bg-slate-100 text-slate-600 hover:text-rose-600 rounded-lg"><Trash2 size={16}/></button>
+                    <button onClick={() => deleteTemplate(tpl._id)} disabled={deletingTemplateId === tpl._id} className="p-2 bg-slate-100 text-slate-600 hover:text-rose-600 rounded-lg disabled:opacity-50">
+                      {deletingTemplateId === tpl._id ? <span className="w-4 h-4 border-2 border-rose-400 border-t-transparent rounded-full animate-spin inline-block" /> : <Trash2 size={16}/>}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -443,8 +457,8 @@ export default function SignaturesAdminPage() {
                     </div>
                   )}
 
-                  <button onClick={generateRequest} disabled={!hasClientSelection || !requestForm.titre || (requestForm.typeSource === 'TEMPLATE' ? !requestForm.templateId : !requestForm.fichierPdfUrl)} className="w-full py-3.5 mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">
-                     Générer le lien de signature
+                  <button onClick={generateRequest} disabled={generatingRequest || !hasClientSelection || !requestForm.titre || (requestForm.typeSource === 'TEMPLATE' ? !requestForm.templateId : !requestForm.fichierPdfUrl)} className="w-full py-3.5 mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                     {generatingRequest ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Génération...</> : 'Générer le lien de signature'}
                   </button>
                 </>
               ) : (
@@ -490,7 +504,9 @@ export default function SignaturesAdminPage() {
 
             <div className="p-5 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
               <button onClick={() => setShowTemplateModal(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100">Annuler</button>
-              <button onClick={saveTemplate} disabled={!templateForm.nom || !templateForm.contenuTexte} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50">Sauvegarder</button>
+              <button onClick={saveTemplate} disabled={savingTemplate || !templateForm.nom || !templateForm.contenuTexte} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                {savingTemplate ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Enregistrement...</> : 'Sauvegarder'}
+              </button>
             </div>
           </div>
         </div>

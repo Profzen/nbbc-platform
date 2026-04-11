@@ -62,7 +62,7 @@ export default function LogsPage() {
       </header>
 
       {loading ? (
-        <div className="text-center py-20 text-slate-400">Chargement...</div>
+        <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : logs.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
           <AlertCircle size={40} className="text-slate-200 mx-auto mb-4" />

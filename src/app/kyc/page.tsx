@@ -18,6 +18,7 @@ export default function KycAdminPage() {
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -30,13 +31,16 @@ export default function KycAdminPage() {
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   const generateLink = async (clientId?: string) => {
-    const res = await fetch('/api/kyc/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId })
-    });
-    const data = await res.json();
-    if (data.success) { setGeneratedLink(data.link); }
+    setGeneratingLink(true);
+    try {
+      const res = await fetch('/api/kyc/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId })
+      });
+      const data = await res.json();
+      if (data.success) { setGeneratedLink(data.link); }
+    } finally { setGeneratingLink(false); }
   };
 
   const copyLink = () => {
@@ -79,9 +83,10 @@ export default function KycAdminPage() {
         </div>
         <button
           onClick={() => generateLink()}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2"
+          disabled={generatingLink}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md flex items-center gap-2 disabled:opacity-60"
         >
-          <Link2 size={18} /> Générer un lien KYC
+          {generatingLink ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Génération...</> : <><Link2 size={18} /> Générer un lien KYC</>}
         </button>
       </header>
 

@@ -93,7 +93,8 @@ export function getAccountId(value: unknown) {
 export function computeAmountFCFA(amount: number, currency: string | undefined, rateUsed?: number) {
   const normalizedAmount = Number(amount || 0);
   const normalizedCurrency = currency || 'FCFA';
-  if (normalizedCurrency === 'FCFA') return normalizedAmount;
+  // Si la devise est FCFA ou si le taux est 1 (devise identique), ne pas appliquer de conversion
+  if (normalizedCurrency === 'FCFA' || Number(rateUsed) === 1) return normalizedAmount;
   return Math.round(normalizedAmount * Number(rateUsed || 1) * 100) / 100;
 }
 
@@ -121,12 +122,34 @@ export function getPreferredRate(currency: string | undefined, date: string | un
 export function enrichTransactions(transactions: AccountingTransaction[], comptes: AccountingCompte[]) {
   return transactions.map((tx) => {
     const amount = tx.quantite && tx.prixUnitaire ? Number(tx.quantite) * Number(tx.prixUnitaire) : Number(tx.montant || 0);
-    const rateUsed = Number(tx.rateUsed || getPreferredRate(tx.txCurrency, tx.date, comptes, transactions));
-    const amountFCFA = Number(tx.amountFCFA || computeAmountFCFA(amount, tx.txCurrency, rateUsed));
+    // Trouver la devise du compte crédité si possible
+    let creditAccountDevise = undefined;
+    let creditAccountTaux = 1;
+    if (tx.accountCreditId) {
+      const creditAccount = comptes.find((c) => getAccountId(c._id) === getAccountId(tx.accountCreditId));
+      if (creditAccount) {
+        creditAccountDevise = creditAccount.devise;
+        creditAccountTaux = Number(creditAccount.tauxFCFA || 1);
+      }
+    }
+    // Correction :
+    // Si la devise de la transaction = devise du compte crédité, le montant FCFA = quantité × prix unitaire × taux du compte
+    // Si la devise de la transaction = FCFA, montant FCFA = quantité × prix unitaire
+    // Sinon, montant FCFA = quantité × prix unitaire × taux de la devise
+    let amountFCFA = amount;
+    if (tx.txCurrency === 'FCFA') {
+      amountFCFA = amount;
+    } else if (creditAccountDevise && tx.txCurrency === creditAccountDevise) {
+      amountFCFA = amount * creditAccountTaux;
+    } else {
+      // Cas conversion classique (ex: EUR -> FCFA)
+      const rateUsed = Number(tx.rateUsed) || getPreferredRate(tx.txCurrency, tx.date, comptes, transactions);
+      amountFCFA = amount * rateUsed;
+    }
+    amountFCFA = Math.round(amountFCFA * 100) / 100;
     return {
       ...tx,
       montant: amount,
-      rateUsed,
       amountFCFA,
     };
   });

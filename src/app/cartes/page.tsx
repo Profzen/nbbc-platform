@@ -34,6 +34,7 @@ export default function CartesPage() {
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchCartes = useCallback(async () => {
     setLoading(true);
@@ -85,9 +86,12 @@ export default function CartesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/cartes/${id}`, { method: 'DELETE' });
-    setConfirmDelete(null);
-    fetchCartes();
+    setDeleting(true);
+    try {
+      await fetch(`/api/cartes/${id}`, { method: 'DELETE' });
+      setConfirmDelete(null);
+      fetchCartes();
+    } finally { setDeleting(false); }
   };
 
   const filtered = cartes.filter(c => {
@@ -183,8 +187,10 @@ export default function CartesPage() {
             <h3 className="text-lg font-bold text-slate-800 mb-2">Supprimer ce compte ?</h3>
             <p className="text-slate-500 text-sm mb-6">Cette action est irréversible.</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">Annuler</button>
-              <button onClick={() => handleDelete(confirmDelete)} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold">Supprimer</button>
+              <button onClick={() => setConfirmDelete(null)} disabled={deleting} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">Annuler</button>
+              <button onClick={() => handleDelete(confirmDelete)} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                {deleting ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Suppression...</> : 'Supprimer'}
+              </button>
             </div>
           </div>
         </div>
