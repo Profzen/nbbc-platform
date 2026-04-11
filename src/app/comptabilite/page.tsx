@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, Fragment, useCallback, useEffect, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -209,6 +209,8 @@ function isNumericHeader(text: string) {
 }
 
 export default function ComptabilitePage() {
+  // Accordéon mobile/tablette : état global pour l'ouverture des détails par transaction
+  const [openDetails, setOpenDetails] = useState<{[id: string]: boolean}>({});
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1105,64 +1107,191 @@ export default function ComptabilitePage() {
               <button onClick={() => exportTransactionsPdf(currentSectionType)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Exporter PDF</button>
             </div>
           </div>
-          <div className="overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3"><CheckSquare size={14} /></th>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Article / Description</th>
-                  <th className="px-4 py-3">Qté</th>
-                  <th className="px-4 py-3">Prix unitaire</th>
-                  <th className="px-4 py-3">Débit</th>
-                  <th className="px-4 py-3">Crédit</th>
-                  <th className="px-4 py-3">{TX_TYPE_CONFIG[currentSectionType].partyLabel}</th>
-                  <th className="px-4 py-3 text-right">Total (FCFA)</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                      <LoadingSpinner label="Chargement..." size="sm" />
-                    </td>
-                  </tr>
-                ) : filteredTransactions.length === 0 ? (
-                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune ligne trouvée.</td></tr>
-                ) : filteredTransactions.map((item, index) => {
+          {/* Responsive rendering: mobile = cards, tablet = compact table, desktop = full table */}
+          <div className="block md:hidden">
+            {/* Mobile: Card + accordéon */}
+            {loading ? (
+              <div className="py-10 text-center text-slate-400"><LoadingSpinner label="Chargement..." size="sm" /></div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="py-10 text-center text-slate-400">Aucune ligne trouvée.</div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filteredTransactions.map((item) => {
                   const debit = accountById(getAccountId(item.accountDebitId));
                   const credit = accountById(getAccountId(item.accountCreditId));
                   const selected = selectedTransactionIds.includes(item._id);
+                  const showDetails = !!openDetails[item._id];
                   return (
-                    <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
-                      <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={(e) => setSelectedTransactionIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
-                      <td className="px-4 py-3 whitespace-nowrap">{normalizeDate(item.date)}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
-                      <td className="px-4 py-3">{item.quantite || 0}</td>
-                      <td className="px-4 py-3">{formatNumber(item.prixUnitaire || 0)} {item.txCurrency || 'FCFA'}</td>
-                      <td className="px-4 py-3">{debit?.nom || '—'}</td>
-                      <td className="px-4 py-3">{credit?.nom || '—'}</td>
-                      <td className="px-4 py-3">{item.tiers || '—'}</td>
-                      <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.amountFCFA || 0)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => openEditTransactionModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
-                          <button onClick={() => deleteTransaction(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                    <div key={item._id} className="rounded-xl border border-slate-200 bg-white shadow p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-slate-800">{item.description}</div>
+                          <div className="text-xs text-slate-400">{normalizeDate(item.date)}</div>
                         </div>
-                      </td>
-                    </tr>
+                        <div className="text-right">
+                          <div className="font-black text-blue-700">{formatCurrencyFCFA(item.amountFCFA || 0)}</div>
+                          <button
+                            className="mt-1 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            onClick={() => setOpenDetails((prev) => ({ ...prev, [item._id]: !prev[item._id] }))}
+                            type="button"
+                          >
+                            {showDetails ? 'Masquer' : 'Voir plus'}
+                          </button>
+                        </div>
+                      </div>
+                      {showDetails && (
+                        <div className="mt-3 text-xs text-slate-600 space-y-1">
+                          <div><strong>Qté:</strong> {item.quantite || 0}</div>
+                          <div><strong>Prix unitaire:</strong> {formatNumber(item.prixUnitaire || 0)} {item.txCurrency || 'FCFA'}</div>
+                          <div><strong>Débit:</strong> {debit?.nom || '—'}</div>
+                          <div><strong>Crédit:</strong> {credit?.nom || '—'}</div>
+                          <div><strong>{TX_TYPE_CONFIG[item.type].partyLabel}:</strong> {item.tiers || '—'}</div>
+                          <div><strong>Note:</strong> {item.notes || '—'}</div>
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2 mt-3">
+                        <button onClick={() => openEditTransactionModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                        <button onClick={() => deleteTransaction(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                        <input type="checkbox" checked={selected} onChange={(e) => setSelectedTransactionIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} className="ml-2" />
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-blue-50/70">
-                  <td colSpan={8} className="px-4 py-3 text-right font-semibold">Total</td>
-                  <td className="px-4 py-3 text-right font-black">{formatCurrencyFCFA(filteredTransactions.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                <div className="bg-blue-50/70 rounded-xl px-4 py-3 text-right font-black text-blue-900 mt-2">Total: {formatCurrencyFCFA(filteredTransactions.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}</div>
+              </div>
+            )}
+          </div>
+          <div className="hidden md:block lg:hidden">
+            {/* Tablette: tableau compact, colonnes principales visibles, bouton pour détails */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs md:text-sm">
+                <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-2 py-2"><CheckSquare size={14} /></th>
+                    <th className="px-2 py-2">Date</th>
+                    <th className="px-2 py-2">Description</th>
+                    <th className="px-2 py-2">Montant</th>
+                    <th className="px-2 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr><td colSpan={5} className="px-2 py-8 text-center text-slate-400"><LoadingSpinner label="Chargement..." size="sm" /></td></tr>
+                  ) : filteredTransactions.length === 0 ? (
+                    <tr><td colSpan={5} className="px-2 py-8 text-center text-slate-400">Aucune ligne trouvée.</td></tr>
+                  ) : filteredTransactions.map((item, index) => {
+                    const debit = accountById(getAccountId(item.accountDebitId));
+                    const credit = accountById(getAccountId(item.accountCreditId));
+                    const selected = selectedTransactionIds.includes(item._id);
+                    const showDetails = !!openDetails[item._id];
+                    return (
+                      <Fragment key={item._id}>
+                        <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                          <td className="px-2 py-2"><input type="checkbox" checked={selected} onChange={(e) => setSelectedTransactionIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
+                          <td className="px-2 py-2 whitespace-nowrap">{normalizeDate(item.date)}</td>
+                          <td className="px-2 py-2 font-medium text-slate-800">{item.description}</td>
+                          <td className="px-2 py-2 font-semibold text-blue-700">{formatCurrencyFCFA(item.amountFCFA || 0)}</td>
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              className="mr-2 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                              onClick={() => setOpenDetails((prev) => ({ ...prev, [item._id]: !prev[item._id] }))}
+                              type="button"
+                            >
+                              {showDetails ? 'Masquer' : 'Details'}
+                            </button>
+                            <button onClick={() => openEditTransactionModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                            <button onClick={() => deleteTransaction(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                          </td>
+                        </tr>
+                        {showDetails && (
+                          <tr className="bg-slate-50">
+                            <td colSpan={5} className="px-4 py-2 text-xs text-slate-600">
+                              <div className="flex flex-wrap gap-4">
+                                <div><strong>Qté:</strong> {item.quantite || 0}</div>
+                                <div><strong>Prix unitaire:</strong> {formatNumber(item.prixUnitaire || 0)} {item.txCurrency || 'FCFA'}</div>
+                                <div><strong>Débit:</strong> {debit?.nom || '—'}</div>
+                                <div><strong>Crédit:</strong> {credit?.nom || '—'}</div>
+                                <div><strong>{TX_TYPE_CONFIG[item.type].partyLabel}:</strong> {item.tiers || '—'}</div>
+                                <div><strong>Note:</strong> {item.notes || '—'}</div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-blue-50/70">
+                    <td colSpan={3} className="px-2 py-2 text-right font-semibold">Total</td>
+                    <td className="px-2 py-2 font-black">{formatCurrencyFCFA(filteredTransactions.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          <div className="hidden lg:block">
+            {/* Desktop: tableau classique inchangé */}
+            <div className="overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3"><CheckSquare size={14} /></th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Article / Description</th>
+                    <th className="px-4 py-3">Qté</th>
+                    <th className="px-4 py-3">Prix unitaire</th>
+                    <th className="px-4 py-3">Débit</th>
+                    <th className="px-4 py-3">Crédit</th>
+                    <th className="px-4 py-3">{TX_TYPE_CONFIG[currentSectionType].partyLabel}</th>
+                    <th className="px-4 py-3 text-right">Total (FCFA)</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                        <LoadingSpinner label="Chargement..." size="sm" />
+                      </td>
+                    </tr>
+                  ) : filteredTransactions.length === 0 ? (
+                    <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune ligne trouvée.</td></tr>
+                  ) : filteredTransactions.map((item, index) => {
+                    const debit = accountById(getAccountId(item.accountDebitId));
+                    const credit = accountById(getAccountId(item.accountCreditId));
+                    const selected = selectedTransactionIds.includes(item._id);
+                    return (
+                      <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                        <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={(e) => setSelectedTransactionIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
+                        <td className="px-4 py-3 whitespace-nowrap">{normalizeDate(item.date)}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
+                        <td className="px-4 py-3">{item.quantite || 0}</td>
+                        <td className="px-4 py-3">{formatNumber(item.prixUnitaire || 0)} {item.txCurrency || 'FCFA'}</td>
+                        <td className="px-4 py-3">{debit?.nom || '—'}</td>
+                        <td className="px-4 py-3">{credit?.nom || '—'}</td>
+                        <td className="px-4 py-3">{item.tiers || '—'}</td>
+                        <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.amountFCFA || 0)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => openEditTransactionModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                            <button onClick={() => deleteTransaction(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-blue-50/70">
+                    <td colSpan={8} className="px-4 py-3 text-right font-semibold">Total</td>
+                    <td className="px-4 py-3 text-right font-black">{formatCurrencyFCFA(filteredTransactions.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
       )}
