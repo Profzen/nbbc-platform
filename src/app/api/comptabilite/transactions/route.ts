@@ -46,12 +46,16 @@ export async function POST(request: Request) {
         creditAccountTaux = Number(creditAccount.tauxFCFA || 1);
       }
     }
-    // Correction stricte :
+    // Nouvelle règle stricte :
+    // - Si la devise de la transaction = devise du compte crédité, montant FCFA = montant (pas de taux)
     // - Si la devise de la transaction est FCFA, montant FCFA = montant
     // - Sinon, montant FCFA = montant × taux du compte crédité (si dispo, sinon 1)
     let rateUsed = 1;
     let amountFCFA = montant;
     if (txCurrency === 'FCFA') {
+      amountFCFA = montant;
+      rateUsed = 1;
+    } else if (creditAccountDevise && txCurrency === creditAccountDevise) {
       amountFCFA = montant;
       rateUsed = 1;
     } else {
