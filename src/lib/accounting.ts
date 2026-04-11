@@ -132,19 +132,14 @@ export function enrichTransactions(transactions: AccountingTransaction[], compte
         creditAccountTaux = Number(creditAccount.tauxFCFA || 1);
       }
     }
-    // Correction :
-    // Si la devise de la transaction = devise du compte crédité, le montant FCFA = quantité × prix unitaire × taux du compte
-    // Si la devise de la transaction = FCFA, montant FCFA = quantité × prix unitaire
-    // Sinon, montant FCFA = quantité × prix unitaire × taux de la devise
+    // Nouvelle correction stricte :
+    // - Si la devise de la transaction est FCFA, montant FCFA = quantité × prix unitaire
+    // - Sinon, montant FCFA = quantité × prix unitaire × taux du compte crédité (si disponible, sinon 1)
     let amountFCFA = amount;
     if (tx.txCurrency === 'FCFA') {
       amountFCFA = amount;
-    } else if (creditAccountDevise && tx.txCurrency === creditAccountDevise) {
-      amountFCFA = amount * creditAccountTaux;
     } else {
-      // Cas conversion classique (ex: EUR -> FCFA)
-      const rateUsed = Number(tx.rateUsed) || getPreferredRate(tx.txCurrency, tx.date, comptes, transactions);
-      amountFCFA = amount * rateUsed;
+      amountFCFA = amount * (creditAccountTaux || 1);
     }
     amountFCFA = Math.round(amountFCFA * 100) / 100;
     return {

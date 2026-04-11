@@ -36,8 +36,29 @@ export async function POST(request: Request) {
       ? Number(body.montant)
       : quantite * prixUnitaire;
     const txCurrency = String(body?.txCurrency || 'FCFA').toUpperCase();
-    const rateUsed = Number(body?.rateUsed || getPreferredRate(txCurrency, body?.date, comptes as any, existingTransactions as any));
-    const amountFCFA = txCurrency === 'FCFA' ? montant : Math.round(montant * rateUsed * 100) / 100;
+    // Trouver la devise et le taux du compte crédité (si fourni)
+    let creditAccountDevise = undefined;
+    let creditAccountTaux = 1;
+    if (body?.accountCreditId) {
+      const creditAccount = comptes.find((c) => String(c._id) === String(body.accountCreditId));
+      if (creditAccount) {
+        creditAccountDevise = creditAccount.devise;
+        creditAccountTaux = Number(creditAccount.tauxFCFA || 1);
+      }
+    }
+    // Correction stricte :
+    // - Si la devise de la transaction est FCFA, montant FCFA = montant
+    // - Sinon, montant FCFA = montant × taux du compte crédité (si dispo, sinon 1)
+    let rateUsed = 1;
+    let amountFCFA = montant;
+    if (txCurrency === 'FCFA') {
+      amountFCFA = montant;
+      rateUsed = 1;
+    } else {
+      amountFCFA = montant * (creditAccountTaux || 1);
+      rateUsed = creditAccountTaux || 1;
+    }
+    amountFCFA = Math.round(amountFCFA * 100) / 100;
 
     const transaction = await Transaction.create({
       type: String(body?.type || 'ACHAT').toUpperCase(),
