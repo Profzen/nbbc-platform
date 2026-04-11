@@ -335,14 +335,53 @@ export default function ComptabilitePage() {
     }
   };
 
-  const openNewTransactionModal = (type: AccountingTransactionType) => {
+  // Helper to find or create special account (Dette/Dépense)
+  const ensureSpecialAccount = async (name: string) => {
+    let account = comptes.find((c) => c.nom === name && c.devise === 'FCFA');
+    if (!account) {
+      setSaving(true);
+      try {
+        const res = await fetch('/api/comptabilite/comptes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nom: name, type: 'Autre', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          await fetchAll();
+          account = json.data;
+        } else {
+          throw new Error(json.error || 'Erreur création compte spécial');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Erreur création compte spécial');
+      } finally {
+        setSaving(false);
+      }
+    }
+    return account;
+  };
+
+  const openNewTransactionModal = async (type: AccountingTransactionType) => {
     clearFlash();
-    setTxForm({
-      ...EMPTY_TX_FORM,
-      type,
-      txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
-      montant: '0',
-    });
+    if (type === 'DETTE' || type === 'DEPENSE') {
+      const specialName = type === 'DETTE' ? 'Dette' : 'Dépense';
+      const special = await ensureSpecialAccount(specialName);
+      setTxForm({
+        ...EMPTY_TX_FORM,
+        type,
+        txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
+        montant: '0',
+        accountCreditId: special?._id || '',
+      });
+    } else {
+      setTxForm({
+        ...EMPTY_TX_FORM,
+        type,
+        txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
+        montant: '0',
+      });
+    }
     setShowTxModal(true);
   };
 
@@ -1310,8 +1349,32 @@ export default function ComptabilitePage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit *</label><select value={txForm.accountDebitId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit *</label><select value={txForm.accountCreditId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit *</label>
+                  <select value={txForm.accountDebitId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <option value="">-- Choisir débit --</option>
+                    {displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit *</label>
+                  {['DETTE', 'DEPENSE'].includes(txForm.type) ? (
+                    (() => {
+                      const specialName = txForm.type === 'DETTE' ? 'Dette' : 'Dépense';
+                      const special = displayAccounts.find((a) => a.nom === specialName && a.devise === 'FCFA');
+                      return (
+                        <select value={special?._id || ''} disabled className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3">
+                          <option value={special?._id || ''}>{specialName} (FCFA)</option>
+                        </select>
+                      );
+                    })()
+                  ) : (
+                    <select value={txForm.accountCreditId} onChange={(e) => setTxForm((prev) => ({ ...prev, accountCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <option value="">-- Choisir crédit --</option>
+                      {displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}
+                    </select>
+                  )}
+                </div>
               </div>
               <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">{TX_TYPE_CONFIG[txForm.type].partyLabel}</label><input type="text" value={txForm.tiers} onChange={(e) => setTxForm((prev) => ({ ...prev, tiers: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={txForm.notes} onChange={(e) => setTxForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
