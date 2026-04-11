@@ -4,24 +4,21 @@ import { FormEvent, Fragment, useCallback, useEffect, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  ArrowDownCircle,
   ArrowLeftRight,
-  ArrowUpCircle,
   BarChart3,
   CheckSquare,
   CreditCard,
   Edit3,
   FileDown,
   Landmark,
-  Plus,
   Receipt,
-  RefreshCw,
   Search,
   ShoppingCart,
   Trash2,
   TrendingUp,
   Wallet,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   computeComptabiliteSummary,
@@ -166,10 +163,6 @@ function buildExportDateLabel() {
   return `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function buildExportFileDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function createPdfReport(title: string, subtitle?: string) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -208,10 +201,26 @@ function isNumericHeader(text: string) {
   return normalized.includes('qte') || normalized.includes('qté') || normalized.includes('pu') || normalized.includes('taux') || normalized.includes('total') || normalized.includes('solde') || normalized.includes('equiv');
 }
 
+function toISODate(value?: string | Date) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function getTodayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isOnOrBeforeDate(value: string | Date | undefined, maxDate: string) {
+  if (!value || !maxDate) return false;
+  return toISODate(value) <= maxDate;
+}
+
 export default function ComptabilitePage() {
   // Accordéon mobile/tablette : état global pour l'ouverture des détails par transaction
   const [openDetails, setOpenDetails] = useState<{[id: string]: boolean}>({});
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
+  const [selectedDate, setSelectedDate] = useState(getTodayISODate());
+  const [dateMode, setDateMode] = useState<'today' | 'custom'>('today');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -242,7 +251,7 @@ export default function ComptabilitePage() {
         setTxForm((prev) => ({ ...prev, montant: String(autoTotal) }));
       }
     }
-  }, [txForm.quantite, txForm.prixUnitaire]);
+  }, [txForm.quantite, txForm.prixUnitaire, txForm.montant]);
   const [depotForm, setDepotForm] = useState<DepotFormState>(EMPTY_DEPOT_FORM);
   const [compteForm, setCompteForm] = useState<CompteFormState>(EMPTY_COMPTE_FORM);
 
@@ -286,11 +295,33 @@ export default function ComptabilitePage() {
     fetchAll();
   }, [fetchAll]);
 
-  const summary = computeComptabiliteSummary(comptes, transactions, depots);
+  useEffect(() => {
+    if (dateMode !== 'today') return;
+
+    const updateToToday = () => {
+      const now = getTodayISODate();
+      setSelectedDate(now);
+    };
+
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setDate(now.getDate() + 1);
+    nextMidnight.setHours(0, 0, 5, 0);
+    const timeoutId = window.setTimeout(updateToToday, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+
+    return () => window.clearTimeout(timeoutId);
+  }, [dateMode, selectedDate]);
+
+  const transactionsUpToSelectedDate = transactions.filter((tx) => isOnOrBeforeDate(tx.date, selectedDate));
+  const depotsUpToSelectedDate = depots.filter((item) => isOnOrBeforeDate(item.date, selectedDate));
+  const summary = computeComptabiliteSummary(comptes, transactionsUpToSelectedDate, depotsUpToSelectedDate, selectedDate);
   const displayAccounts = [...summary.comptes].sort((a, b) => Number(a.ordre || 0) - Number(b.ordre || 0) || String(a.nom).localeCompare(String(b.nom)));
 
+  const selectedDayTransactions = summary.transactions.filter((tx) => toISODate(tx.date) === selectedDate);
+  const selectedDayDepots = summary.depots.filter((item) => toISODate(item.date) === selectedDate);
+
   const transactionSearch = search.trim().toLowerCase();
-  const filteredTransactions = summary.transactions.filter((tx) => {
+  const filteredTransactions = selectedDayTransactions.filter((tx) => {
     const sectionType = activeSection === 'achats' ? 'ACHAT' : activeSection === 'ventes' ? 'VENTE' : activeSection === 'depenses' ? 'DEPENSE' : activeSection === 'dettes' ? 'DETTE' : null;
     if (!sectionType) return false;
     if (tx.type !== sectionType) return false;
@@ -299,7 +330,7 @@ export default function ComptabilitePage() {
       .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
   });
 
-  const filteredDepots = summary.depots.filter((item) => {
+  const filteredDepots = selectedDayDepots.filter((item) => {
     if (!transactionSearch) return true;
     return [item.operateur, item.description, item.date, item.notes]
       .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
@@ -374,6 +405,7 @@ export default function ComptabilitePage() {
         type,
         txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
         montant: '0',
+        date: selectedDate,
         accountCreditId: special?._id || '',
       });
     } else {
@@ -382,6 +414,7 @@ export default function ComptabilitePage() {
         type,
         txCurrency: TX_TYPE_CONFIG[type].defaultCurrency,
         montant: '0',
+        date: selectedDate,
       });
     }
     setShowTxModal(true);
@@ -493,7 +526,7 @@ export default function ComptabilitePage() {
 
   const openNewDepotModal = () => {
     clearFlash();
-    setDepotForm(EMPTY_DEPOT_FORM);
+    setDepotForm({ ...EMPTY_DEPOT_FORM, date: selectedDate });
     setShowDepotModal(true);
   };
 
@@ -746,8 +779,8 @@ export default function ComptabilitePage() {
   };
 
   const exportTransactionsPdf = (type: AccountingTransactionType) => {
-    const list = summary.transactions.filter((item) => item.type === type);
-    const doc = createPdfReport(`Rapport ${TX_TYPE_CONFIG[type].label}s`, `${list.length} ligne(s)`);
+    const list = selectedDayTransactions.filter((item) => item.type === type);
+    const doc = createPdfReport(`Rapport ${TX_TYPE_CONFIG[type].label}s`, `${selectedDate} • ${list.length} ligne(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     const rawHead = [
@@ -826,17 +859,18 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total: ${formatPdfCurrency(list.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}`, 24, finalY + 22);
+    doc.text(`Date: ${selectedDate}`, 24, finalY + 22);
+    doc.text(`Total: ${formatPdfCurrency(list.reduce((sum, item) => sum + Number(item.amountFCFA || 0), 0))}`, 24, finalY + 40);
     appendPageNumbers(doc);
-    doc.save(`${type.toLowerCase()}_${buildExportFileDate()}.pdf`);
+    doc.save(`${type.toLowerCase()}_${selectedDate}.pdf`);
   };
 
   const exportDepotsPdf = () => {
-    const doc = createPdfReport('Rapport Depots / Retraits', `${summary.depots.length} operation(s)`);
+    const doc = createPdfReport('Rapport Depots / Retraits', `${selectedDate} • ${selectedDayDepots.length} operation(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     const depRawHead = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
-    const depRawBody = summary.depots.map((item) => {
+    const depRawBody = selectedDayDepots.map((item) => {
       const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
       const credit = accountById(getAccountId(item.compteCreditId));
       return [
@@ -901,9 +935,10 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total: ${formatPdfCurrency(summary.totals.depots + summary.totals.retraits)}`, 24, finalY + 22);
+    doc.text(`Date: ${selectedDate}`, 24, finalY + 22);
+    doc.text(`Total: ${formatPdfCurrency(selectedDayDepots.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 40);
     appendPageNumbers(doc);
-    doc.save(`depots_${buildExportFileDate()}.pdf`);
+    doc.save(`depots_${selectedDate}.pdf`);
   };
 
   const exportComptesPdf = () => {
@@ -978,7 +1013,7 @@ export default function ComptabilitePage() {
     y += 16;
     doc.text(`Total disponible: ${formatPdfCurrency(summary.totals.totalDisponible)}`, 40, y);
     appendPageNumbers(doc);
-    doc.save(`comptes_${buildExportFileDate()}.pdf`);
+    doc.save(`comptes_${selectedDate}.pdf`);
   };
 
   const currentSectionType = activeSection === 'achats' ? 'ACHAT' : activeSection === 'ventes' ? 'VENTE' : activeSection === 'depenses' ? 'DEPENSE' : activeSection === 'dettes' ? 'DETTE' : null;
@@ -988,7 +1023,10 @@ export default function ComptabilitePage() {
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-black text-slate-800">{SECTION_META[activeSection].label}</h1>
-          <p className="text-slate-500 mt-1">Synchronisation des achats, ventes, dépenses, dettes, dépôts/retraits et libellés comptables.</p>
+          <p className="text-slate-500 mt-1">
+            Synchronisation des achats, ventes, dépenses, dettes, dépôts/retraits et libellés comptables.
+            <span className="ml-2 font-semibold text-slate-700">Journée affichée : {selectedDate}</span>
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {activeSection === 'achats' && <button onClick={() => openNewTransactionModal('ACHAT')} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvel Achat</button>}
@@ -1002,6 +1040,34 @@ export default function ComptabilitePage() {
 
       {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
       {message && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-700">Filtre de date</div>
+          <div className="text-xs text-slate-500">Affiche les écritures du jour choisi et les soldes cumulés jusqu’à cette date.</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => {
+              setSelectedDate(e.target.value || getTodayISODate());
+              setDateMode('custom');
+            }}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate(getTodayISODate());
+              setDateMode('today');
+            }}
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${dateMode === 'today' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+            Aujourd&apos;hui
+          </button>
+        </div>
+      </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1">
         {(Object.keys(SECTION_META) as SectionId[]).map((section) => {

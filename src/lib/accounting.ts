@@ -215,7 +215,7 @@ export function computeAccountBalances(comptesRaw: AccountingCompte[], transacti
   });
 }
 
-export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], transactionsRaw: AccountingTransaction[], depotsRaw: AccountingDepot[]) {
+export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], transactionsRaw: AccountingTransaction[], depotsRaw: AccountingDepot[], referenceDate?: string | Date) {
   const transactions = enrichTransactions(transactionsRaw, comptesRaw);
   const depots = enrichDepots(depotsRaw);
   const comptes = computeAccountBalances(comptesRaw, transactions, depots);
@@ -242,7 +242,7 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const totalDisponible = Math.round((totalComptes + benefice - totalDepenses - totalDettes) * 100) / 100;
 
   const monthlyMap = new Map<string, { month: string; ACHAT: number; VENTE: number; DEPENSE: number; DETTE: number }>();
-  const now = new Date();
+  const now = referenceDate ? new Date(referenceDate) : new Date();
   for (let index = 5; index >= 0; index -= 1) {
     const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
