@@ -132,16 +132,17 @@ export function enrichTransactions(transactions: AccountingTransaction[], compte
         creditAccountTaux = Number(creditAccount.tauxFCFA || 1);
       }
     }
-    // Nouvelle correction stricte :
-    // - Si la devise de la transaction est FCFA, montant FCFA = quantité × prix unitaire
-    // - Sinon, montant FCFA = quantité × prix unitaire × taux du compte crédité (si disponible, sinon 1)
-    let amountFCFA = amount;
-    if (tx.txCurrency === 'FCFA') {
-      amountFCFA = amount;
-    } else {
-      amountFCFA = amount * (creditAccountTaux || 1);
+    // Si amountFCFA est déjà présent (persisté en base), on l'utilise tel quel
+    let amountFCFA = typeof tx.amountFCFA === 'number' ? tx.amountFCFA : undefined;
+    if (amountFCFA === undefined) {
+      // Sinon, on recalcule (fallback)
+      if (tx.txCurrency === 'FCFA') {
+        amountFCFA = amount;
+      } else {
+        amountFCFA = amount * (creditAccountTaux || 1);
+      }
+      amountFCFA = Math.round(amountFCFA * 100) / 100;
     }
-    amountFCFA = Math.round(amountFCFA * 100) / 100;
     return {
       ...tx,
       montant: amount,
