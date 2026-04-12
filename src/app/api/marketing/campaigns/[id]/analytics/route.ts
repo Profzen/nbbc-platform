@@ -16,6 +16,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     const logs = await DeliveryLog.find({ campaign: id });
     const statuses = {
       SENT: logs.filter(l => l.status === 'SENT').length,
+      ACCEPTED: logs.filter(l => l.status === 'ACCEPTED').length,
+      DELIVERED: logs.filter(l => l.status === 'DELIVERED').length,
+      IN_PROCESS: logs.filter(l => l.status === 'IN_PROCESS').length,
+      BLOCKED: logs.filter(l => l.status === 'BLOCKED').length,
       FAILED: logs.filter(l => l.status === 'FAILED').length,
       BOUNCED: logs.filter(l => l.status === 'BOUNCED').length,
       OPENED: logs.filter(l => l.status === 'OPENED').length,
@@ -29,19 +33,30 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     });
 
+    const failureReasonsList = Object.entries(failureReasons)
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+
     const analytics = {
       totalDestinataires: campaign.nombreDestinataires || 0,
+      canal: campaign.canal,
       statuses,
-      tauxDelivrance: campaign.nombreDestinataires ? Math.round((statuses.SENT / campaign.nombreDestinataires) * 100) : 0,
+      totalEnvoyes: statuses.SENT + statuses.ACCEPTED + statuses.DELIVERED + statuses.IN_PROCESS,
+      totalLivres: statuses.DELIVERED,
+      tauxDelivrance: campaign.nombreDestinataires ? Math.round((statuses.DELIVERED / campaign.nombreDestinataires) * 100) : 0,
       tauxOuverture: logs.length > 0 ? Math.round((statuses.OPENED / logs.length) * 100) : 0,
       tauxClic: logs.length > 0 ? Math.round((statuses.CLICKED / logs.length) * 100) : 0,
-      failureReasons,
+      failureReasons: failureReasonsList,
       dateEnvoi: campaign.dateEnvoi,
-      courierLogs: logs.slice(0, 50).map(l => ({
+      logs: logs.slice(0, 50).map(l => ({
         email: l.email,
         status: l.status,
         errorMessage: l.errorMessage,
         sentAt: l.sentAt,
+        provider: l.provider,
+        messageId: l.messageId,
+        traceStatus: l.traceStatus,
+        traceRoute: l.traceRoute,
       })),
     };
 

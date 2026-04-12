@@ -4,6 +4,11 @@ type SendMailParams = {
   to: string | string[];
   subject: string;
   html: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    contentType?: string;
+  }>;
 };
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -26,7 +31,7 @@ export function isMailerConfigured() {
   return Boolean(SMTP_USER && SMTP_PASS);
 }
 
-export async function sendMail({ to, subject, html }: SendMailParams) {
+export async function sendMail({ to, subject, html, attachments }: SendMailParams) {
   const transport = createTransport();
   if (!transport) {
     console.warn('[MAILER] SMTP non configure, email non envoye:', subject);
@@ -39,6 +44,7 @@ export async function sendMail({ to, subject, html }: SendMailParams) {
       to: Array.isArray(to) ? to.join(', ') : to,
       subject,
       html,
+      attachments,
     });
     return { success: true as const, skipped: false as const };
   } catch (error: any) {

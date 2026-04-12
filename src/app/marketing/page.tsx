@@ -25,14 +25,18 @@ interface CampaignTemplate {
 }
 
 interface AnalyticsData {
+  canal?: Canal;
   total: number;
   sent: number;
   failed: number;
   deliveryRate: number;
   openRate: number;
   clickRate: number;
+  totalEnvoyes?: number;
+  totalLivres?: number;
+  statuses?: { SENT?: number; ACCEPTED?: number; DELIVERED?: number; IN_PROCESS?: number; BLOCKED?: number; FAILED?: number; OPENED?: number; CLICKED?: number };
   failureReasons: { reason: string; count: number }[];
-  logs: { email: string; status: string; sentAt: string; errorMessage?: string }[];
+  logs: { email: string; status: string; sentAt: string; errorMessage?: string; provider?: string; messageId?: string; traceStatus?: string; traceRoute?: string }[];
 }
 
 interface Client { _id: string; nom: string; prenom: string; email: string; telephone?: string; typeClient: string; paysResidence?: string; servicesUtilises?: string[]; }
@@ -1110,12 +1114,19 @@ export default function MarketingPage() {
                         <div className="space-y-5">
                           {/* KPIs */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {[
-                              { label: 'Destinataires', value: analyticsData.total, color: 'text-slate-700', bg: 'bg-slate-50' },
-                              { label: 'Envoyés', value: analyticsData.sent, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-                              { label: 'Échecs', value: analyticsData.failed, color: 'text-rose-700', bg: 'bg-rose-50' },
-                              { label: 'Taux délivrance', value: `${analyticsData.deliveryRate}%`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
-                            ].map(kpi => (
+                            {(analyticsData.canal === 'SMS'
+                              ? [
+                                  { label: 'Destinataires', value: analyticsData.total, color: 'text-slate-700', bg: 'bg-slate-50' },
+                                  { label: 'Acceptés', value: analyticsData.totalEnvoyes ?? analyticsData.sent, color: 'text-blue-700', bg: 'bg-blue-50' },
+                                  { label: 'Livrés', value: analyticsData.totalLivres ?? analyticsData.statuses?.DELIVERED ?? 0, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+                                  { label: 'En cours / bloqués', value: (analyticsData.statuses?.IN_PROCESS ?? 0) + (analyticsData.statuses?.BLOCKED ?? 0), color: 'text-amber-700', bg: 'bg-amber-50' },
+                                ]
+                              : [
+                                  { label: 'Destinataires', value: analyticsData.total, color: 'text-slate-700', bg: 'bg-slate-50' },
+                                  { label: 'Envoyés', value: analyticsData.sent, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+                                  { label: 'Échecs', value: analyticsData.failed, color: 'text-rose-700', bg: 'bg-rose-50' },
+                                  { label: 'Taux délivrance', value: `${analyticsData.deliveryRate}%`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+                                ]).map(kpi => (
                               <div key={kpi.label} className={`${kpi.bg} rounded-xl p-3 text-center`}>
                                 <div className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</div>
                                 <div className="text-xs text-slate-500 mt-0.5">{kpi.label}</div>
@@ -1126,7 +1137,7 @@ export default function MarketingPage() {
                           {/* Barre de progression délivrance */}
                           <div>
                             <div className="flex justify-between text-xs text-slate-500 mb-1">
-                              <span>Taux de délivrance</span>
+                              <span>{analyticsData.canal === 'SMS' ? 'Taux de livraison' : 'Taux de délivrance'}</span>
                               <span className="font-bold text-emerald-700">{analyticsData.deliveryRate}%</span>
                             </div>
                             <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
@@ -1155,14 +1166,27 @@ export default function MarketingPage() {
                             <div>
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Derniers envois ({analyticsData.logs.length})</div>
                               <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-100 rounded-xl p-2">
-                                {analyticsData.logs.slice(0, 20).map((log: any, i: number) => (
+                                {analyticsData.logs.slice(0, 20).map((log: any, i: number) => {
+                                  const normalizedStatus = String(log.status || '').toUpperCase();
+                                  const statusClass = normalizedStatus === 'DELIVERED'
+                                    ? 'bg-emerald-400'
+                                    : normalizedStatus === 'ACCEPTED'
+                                      ? 'bg-blue-400'
+                                      : normalizedStatus === 'IN_PROCESS'
+                                        ? 'bg-amber-400'
+                                        : normalizedStatus === 'BLOCKED' || normalizedStatus === 'FAILED'
+                                          ? 'bg-rose-400'
+                                          : 'bg-slate-400';
+                                  const statusText = normalizedStatus || 'UNKNOWN';
+                                  return (
                                   <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-slate-50">
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'SENT' ? 'bg-emerald-400' : log.status === 'FAILED' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${statusClass}`} />
                                     <span className="text-slate-600 truncate flex-1">{log.email}</span>
-                                    <span className={`font-bold shrink-0 ${log.status === 'SENT' ? 'text-emerald-600' : 'text-rose-600'}`}>{log.status}</span>
+                                    <span className={`font-bold shrink-0 ${normalizedStatus === 'DELIVERED' ? 'text-emerald-600' : normalizedStatus === 'ACCEPTED' ? 'text-blue-600' : normalizedStatus === 'IN_PROCESS' ? 'text-amber-600' : 'text-rose-600'}`}>{statusText}</span>
                                     {log.sentAt && <span className="text-slate-300 shrink-0">{new Date(log.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           )}

@@ -5,7 +5,7 @@ import Client from '@/models/Client';
 import GroupeClient from '@/models/GroupeClient';
 import DeliveryLog from '@/models/DeliveryLog';
 import { sendMail } from '@/lib/mailer';
-import { sendSms } from '@/lib/sms-sender';
+import { sendSms, traceKingSmsMessage } from '@/lib/sms-sender';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { logActivity } from '@/lib/activity-logger';
@@ -82,9 +82,31 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         .replace(/\{\{email\}\}/g, client.email || '');
 
       let result: { success: boolean; error?: string };
+      let logStatus = campaign.canal === 'SMS' ? 'ACCEPTED' : 'SENT';
+      let messageId: string | null = null;
+      let provider: string | null = null;
+      let traceStatus: string | null = null;
+      let traceRoute: string | null = null;
+      let traceError: string | null = null;
       if (campaign.canal === 'SMS') {
         const smsResult = await sendSms({ to: client.telephone ?? '', body: personalizedText });
+        provider = smsResult.success ? smsResult.provider : 'KINGSMS';
+        messageId = smsResult.success ? smsResult.messageId || null : null;
         result = { success: smsResult.success, error: smsResult.success ? undefined : (smsResult as any).error ?? 'Échec envoi SMS' };
+
+        if (smsResult.success && smsResult.provider === 'KINGSMS' && messageId) {
+          const trace = await traceKingSmsMessage(messageId);
+          traceStatus = trace.rawStatus || trace.status;
+          traceRoute = trace.route || null;
+          traceError = trace.success ? null : trace.error || null;
+          if (trace.status === 'DELIVERED') logStatus = 'DELIVERED';
+          else if (trace.status === 'ACCEPTED') logStatus = 'ACCEPTED';
+          else if (trace.status === 'IN_PROCESS') logStatus = 'IN_PROCESS';
+          else if (trace.status === 'BLOCKED') logStatus = 'BLOCKED';
+          else if (trace.status === 'FAILED') logStatus = 'FAILED';
+        } else if (smsResult.success) {
+          logStatus = 'ACCEPTED';
+        }
       } else {
         result = await sendMail({
           to: client.email,
@@ -97,8 +119,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         campaign: id,
         recipient: clientMap.get(client.email) || null,
         email: client.email,
-        status: result.success ? 'SENT' : 'FAILED',
-        errorMessage: result.success ? null : (result.error || `Echec d'envoi ${campaign.canal === 'SMS' ? 'SMS' : 'SMTP'}`),
+        status: result.success ? logStatus : 'FAILED',
+        errorMessage: result.success ? traceError : (result.error || `Echec d'envoi ${campaign.canal === 'SMS' ? 'SMS' : 'SMTP'}`),
+        provider,
+        messageId,
+        traceStatus,
+        traceRoute,
+        tracedAt: traceStatus ? new Date() : null,
+        metadata: {
+          ...(campaign.canal === 'SMS' ? { sms: true } : {}),
+          provider,
+          messageId,
+          traceStatus,
+          traceRoute,
+        },
       });
       await log.save();
 

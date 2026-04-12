@@ -14,7 +14,19 @@ type SmsSendResult =
   | { success: true; provider: 'KINGSMS' | 'TWILIO'; messageId?: string }
   | { success: false; skipped: boolean; provider?: 'KINGSMS' | 'TWILIO'; error?: string };
 
+export type KingSmsTraceStatus = 'DELIVERED' | 'ACCEPTED' | 'IN_PROCESS' | 'BLOCKED' | 'FAILED' | 'UNKNOWN';
+
+export type KingSmsTraceResult = {
+  success: boolean;
+  status: KingSmsTraceStatus;
+  rawStatus?: string;
+  route?: string;
+  messageId?: string;
+  error?: string;
+};
+
 const KINGSMS_ENDPOINT = process.env.KINGSMS_API_BASE || 'https://edok-api.kingsmspro.com/api/v1/sms/send';
+const KINGSMS_TRACE_ENDPOINT = process.env.KINGSMS_TRACE_API_BASE || KINGSMS_ENDPOINT.replace(/\/send$/, '/trace');
 
 /** Indicatif pays par défaut (Togo = 228). Configurable via KINGSMS_DEFAULT_COUNTRY */
 const DEFAULT_COUNTRY = process.env.KINGSMS_DEFAULT_COUNTRY || '228';
@@ -37,6 +49,61 @@ function normalizePhone(input: string): string {
 
 function isKingSmsConfigured(): boolean {
   return Boolean(process.env.KINGSMS_APIKEY && process.env.KINGSMS_CLIENTID);
+}
+
+function normalizeKingSmsTraceStatus(rawStatus: unknown): KingSmsTraceStatus {
+  const status = String(rawStatus || '').toUpperCase();
+  if (status === 'DLV') return 'DELIVERED';
+  if (status === 'ACT') return 'ACCEPTED';
+  if (status === 'IPR' || status === 'BUF' || status === 'DLG' || status === 'ITM') return 'IN_PROCESS';
+  if (status === 'BLO') return 'BLOCKED';
+  if (status === 'ABS' || status === 'EXP' || status === 'ERD' || status === 'INV' || status === 'NCR' || status === 'NPZ' || status === 'IPV' || status === 'MAX' || status === 'MAP' || status === 'LEN' || status === 'DUP') {
+    return 'FAILED';
+  }
+  return 'UNKNOWN';
+}
+
+export async function traceKingSmsMessage(messageId: string): Promise<KingSmsTraceResult> {
+  const apiKey = process.env.KINGSMS_APIKEY;
+  const clientId = process.env.KINGSMS_CLIENTID;
+
+  if (!apiKey || !clientId) {
+    return { success: false, status: 'FAILED', messageId, error: 'Provider KingSMS non configure' };
+  }
+
+  const formData = new URLSearchParams();
+  formData.append('messageId', String(messageId || '').trim());
+
+  try {
+    const response = await fetch(KINGSMS_TRACE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        APIKEY: apiKey,
+        CLIENTID: clientId,
+      },
+      body: formData,
+    });
+
+    const rawText = await response.text();
+    const parsed = JSON.parse(rawText);
+    const trace = parsed?.result || parsed;
+    const rawStatus = trace?.status || parsed?.status;
+    const status = normalizeKingSmsTraceStatus(rawStatus);
+
+    if (!response.ok) {
+      return { success: false, status, rawStatus: String(rawStatus || ''), route: trace?.route, messageId: trace?.messageId || messageId, error: trace?.message || parsed?.message || `KingSMS trace HTTP ${response.status}` };
+    }
+
+    return {
+      success: true,
+      status,
+      rawStatus: String(rawStatus || ''),
+      route: trace?.route,
+      messageId: trace?.messageId || messageId,
+    };
+  } catch (error: any) {
+    return { success: false, status: 'FAILED', messageId, error: error?.message || 'Erreur trace KingSMS' };
+  }
 }
 
 export function isSmsConfigured(): boolean {
