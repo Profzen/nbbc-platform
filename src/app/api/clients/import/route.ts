@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Client from '@/models/Client';
+import { normalizeCountryCode } from '@/lib/countries';
 
 function parseCsvLine(line: string): string[] {
   const values: string[] = [];
@@ -88,16 +89,16 @@ function detectServices(text: string): string[] {
 
 function countryFromPhone(phone: string): string {
   if (!phone.startsWith('+')) return 'INCONNU';
-  if (phone.startsWith('+228')) return 'TOGO';
-  if (phone.startsWith('+229')) return 'BENIN';
-  if (phone.startsWith('+225')) return 'COTE DIVOIRE';
-  if (phone.startsWith('+234')) return 'NIGERIA';
-  if (phone.startsWith('+233')) return 'GHANA';
-  if (phone.startsWith('+221')) return 'SENEGAL';
-  if (phone.startsWith('+223')) return 'MALI';
-  if (phone.startsWith('+254')) return 'KENYA';
-  if (phone.startsWith('+971')) return 'EAU';
-  if (phone.startsWith('+1')) return 'USA';
+  if (phone.startsWith('+228')) return 'TG';
+  if (phone.startsWith('+229')) return 'BJ';
+  if (phone.startsWith('+225')) return 'CI';
+  if (phone.startsWith('+234')) return 'NG';
+  if (phone.startsWith('+233')) return 'GH';
+  if (phone.startsWith('+221')) return 'SN';
+  if (phone.startsWith('+223')) return 'ML';
+  if (phone.startsWith('+254')) return 'KE';
+  if (phone.startsWith('+971')) return 'AE';
+  if (phone.startsWith('+1')) return 'US';
   return 'INCONNU';
 }
 
@@ -208,7 +209,8 @@ export async function POST(request: Request) {
 
       const { prenom, nom } = splitName(firstName || orgName, lastName, middleName);
       const services = detectServices(sourceText);
-      const paysResidence = (providedCountry || countryFromPhone(phone) || 'INCONNU').toUpperCase();
+      const normalizedCountry = normalizeCountryCode(providedCountry) || normalizeCountryCode(countryFromPhone(phone));
+      const paysResidence = normalizedCountry || 'INCONNU';
       const email = explicitEmail || makeImportEmail(prenom, nom, phone, i);
 
       // Look up in memory instead of querying DB

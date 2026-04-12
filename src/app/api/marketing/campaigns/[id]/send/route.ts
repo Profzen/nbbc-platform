@@ -22,11 +22,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   // --- Résolution des destinataires selon le mode de ciblage ---
-  let clients: { email: string; nom: string; prenom: string; telephone?: string }[] = [];
+  let clients: { email: string; nom: string; prenom: string; telephone?: string; paysResidence?: string }[] = [];
 
   const cibleType = campaign.cibleType || 'TOUS';
 
-  const selectFields = 'email nom prenom telephone';
+  const selectFields = 'email nom prenom telephone paysResidence';
 
   if (cibleType === 'SELECTIONNES' && campaign.destinataireIds?.length) {
     clients = await Client.find({ _id: { $in: campaign.destinataireIds } }).select(selectFields);
@@ -37,7 +37,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       for (const c of (g as any).clientIds) {
         if (!seen.has(String(c._id))) {
           seen.add(String(c._id));
-          clients.push({ email: c.email, nom: c.nom, prenom: c.prenom, telephone: c.telephone });
+          clients.push({ email: c.email, nom: c.nom, prenom: c.prenom, telephone: c.telephone, paysResidence: c.paysResidence });
         }
       }
     }
@@ -62,6 +62,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   let envoyes = 0;
   let echecs = 0;
   const errors: string[] = [];
+  const smsStatusCounts = { accepted: 0, delivered: 0, inProcess: 0, blocked: 0, failed: 0, unknown: 0 };
 
   // Récupérer les IDs de clients pour les logs
   const clientMap = new Map<string, string>();
@@ -89,7 +90,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       let traceRoute: string | null = null;
       let traceError: string | null = null;
       if (campaign.canal === 'SMS') {
-        const smsResult = await sendSms({ to: client.telephone ?? '', body: personalizedText });
+        const smsResult = await sendSms({ to: client.telephone ?? '', body: personalizedText, countryHint: client.paysResidence });
         provider = smsResult.success ? smsResult.provider : 'KINGSMS';
         messageId = smsResult.success ? smsResult.messageId || null : null;
         result = { success: smsResult.success, error: smsResult.success ? undefined : (smsResult as any).error ?? 'Échec envoi SMS' };
@@ -104,6 +105,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           else if (trace.status === 'IN_PROCESS') logStatus = 'IN_PROCESS';
           else if (trace.status === 'BLOCKED') logStatus = 'BLOCKED';
           else if (trace.status === 'FAILED') logStatus = 'FAILED';
+          else logStatus = 'ACCEPTED';
         } else if (smsResult.success) {
           logStatus = 'ACCEPTED';
         }
@@ -136,6 +138,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       });
       await log.save();
 
+      if (campaign.canal === 'SMS') {
+        if (!result.success) smsStatusCounts.failed += 1;
+        else if (logStatus === 'DELIVERED') smsStatusCounts.delivered += 1;
+        else if (logStatus === 'ACCEPTED') smsStatusCounts.accepted += 1;
+        else if (logStatus === 'IN_PROCESS') smsStatusCounts.inProcess += 1;
+        else if (logStatus === 'BLOCKED') smsStatusCounts.blocked += 1;
+        else if (logStatus === 'FAILED') smsStatusCounts.failed += 1;
+        else smsStatusCounts.unknown += 1;
+      }
+
       if (result.success) envoyes++;
       else { echecs++; errors.push(`${client.email || client.telephone}: ${result.error}`); }
     }));
@@ -150,6 +162,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   campaign.nombreEchecs = echecs;
   campaign.statut = echecs === clients.length ? 'ECHEC' : 'ENVOYE';
   campaign.dateEnvoi = new Date();
+  if (campaign.canal === 'SMS') {
+    campaign.smsStatusSummary = smsStatusCounts;
+  }
   await campaign.save();
 
   const session = await getServerSession(authOptions);

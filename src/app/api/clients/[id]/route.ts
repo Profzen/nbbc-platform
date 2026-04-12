@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
 import Client from '@/models/Client';
 import { logActivity } from '@/lib/activity-logger';
+import { normalizeCountryCode } from '@/lib/countries';
 
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -24,7 +25,15 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     await dbConnect();
     const params = await context.params;
     const body = await req.json();
-    const client = await Client.findByIdAndUpdate(params.id, body, {
+    const countryCode = normalizeCountryCode(body?.paysResidence);
+    if (!countryCode) {
+      return NextResponse.json({ success: false, error: 'Pays de residence invalide.' }, { status: 400 });
+    }
+    const payload = {
+      ...body,
+      paysResidence: countryCode,
+    };
+    const client = await Client.findByIdAndUpdate(params.id, payload, {
       new: true,
       runValidators: true,
     });

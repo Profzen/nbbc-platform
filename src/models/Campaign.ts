@@ -20,6 +20,14 @@ export interface ICampaign extends Document {
   nombreDestinataires: number;
   nombreEnvoyes: number;
   nombreEchecs: number;
+  smsStatusSummary?: {
+    accepted: number;
+    delivered: number;
+    inProcess: number;
+    blocked: number;
+    failed: number;
+    unknown: number;
+  };
   dateEnvoi?: Date;
   // Envoi programmé
   isScheduled: boolean;
@@ -54,6 +62,14 @@ const CampaignSchema: Schema = new Schema(
     nombreDestinataires: { type: Number, default: 0 },
     nombreEnvoyes: { type: Number, default: 0 },
     nombreEchecs: { type: Number, default: 0 },
+    smsStatusSummary: {
+      accepted: { type: Number, default: 0 },
+      delivered: { type: Number, default: 0 },
+      inProcess: { type: Number, default: 0 },
+      blocked: { type: Number, default: 0 },
+      failed: { type: Number, default: 0 },
+      unknown: { type: Number, default: 0 },
+    },
     dateEnvoi: { type: Date },
     isScheduled: { type: Boolean, default: false },
     scheduledAt: { type: Date, default: null },

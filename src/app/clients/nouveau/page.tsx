@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, User, Briefcase } from 'lucide-react';
+import { getCountryOptions } from '@/lib/countries';
 
 export default function NouveauClient() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function NouveauClient() {
   });
 
   const availableServices = ['ZELLE', 'CASH_APP', 'WIRE', 'PAYPAL', 'CRYPTO', 'EURO', 'WISE', 'AUTRE'];
+  const countryOptions = getCountryOptions();
 
   const handleServiceToggle = (service: string) => {
     setFormData(prev => ({
@@ -94,7 +96,12 @@ export default function NouveauClient() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Pays de résidence <span className="text-red-500">*</span></label>
-              <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white" value={formData.paysResidence} onChange={e => setFormData({...formData, paysResidence: e.target.value})} placeholder="France, Canada, etc." />
+              <select required className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white font-semibold" value={formData.paysResidence} onChange={e => setFormData({...formData, paysResidence: e.target.value})}>
+                <option value="">Choisir un pays</option>
+                {countryOptions.map((country) => (
+                  <option key={country.code} value={country.code}>{country.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Type de Client</label>

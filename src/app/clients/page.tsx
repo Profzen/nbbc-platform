@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, MoreVertical, Users, Phone, PenTool, Upload, Globe2, Building2, Layers, X, Pencil, Trash2, Save } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { getCountryDisplayName, getCountryOptions, normalizeCountryCode } from '@/lib/countries';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
@@ -59,6 +60,7 @@ export default function ClientsPage() {
   const [editForm, setEditForm] = useState({ nom: '', prenom: '', email: '', telephone: '', paysResidence: '', typeClient: '' });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const countryOptions = getCountryOptions();
 
   const filteredClients = clients.filter(c => {
     const q = searchQuery.toLowerCase();
@@ -81,7 +83,7 @@ export default function ClientsPage() {
         serviceCount.set(service, (serviceCount.get(service) || 0) + 1);
       });
 
-      const country = (client.paysResidence || 'INCONNU').toUpperCase();
+      const country = getCountryDisplayName(client.paysResidence || 'INCONNU');
       countryCount.set(country, (countryCount.get(country) || 0) + 1);
 
       const type = client.typeClient || 'PARTICULIER';
@@ -181,13 +183,14 @@ export default function ClientsPage() {
   };
 
   const openEdit = (client: any) => {
+    const normalizedCountry = normalizeCountryCode(client.paysResidence || '');
     setEditClient(client);
     setEditForm({
       nom: client.nom || '',
       prenom: client.prenom || '',
       email: client.email || '',
       telephone: client.telephone || '',
-      paysResidence: client.paysResidence || '',
+      paysResidence: normalizedCountry || '',
       typeClient: client.typeClient || 'PARTICULIER',
     });
     setOpenMenuId(null);
@@ -539,7 +542,7 @@ export default function ClientsPage() {
                     <td className="px-6 py-3 text-sm font-medium text-slate-800">{client.nom} {client.prenom}</td>
                     <td className="px-6 py-3 text-sm text-slate-600">{client.email}</td>
                     <td className="px-6 py-3 text-sm text-slate-600">{client.telephone || '—'}</td>
-                    <td className="px-6 py-3 text-sm text-slate-600">{client.paysResidence || '—'}</td>
+                    <td className="px-6 py-3 text-sm text-slate-600">{getCountryDisplayName(client.paysResidence || 'INCONNU')}</td>
                     <td className="px-6 py-3 text-sm">
                       <div className="flex flex-wrap gap-1">
                         {(client.servicesUtilises || []).map((service: string) => (
@@ -633,7 +636,12 @@ export default function ClientsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Pays de résidence</label>
-                <input value={editForm.paysResidence} onChange={e => setEditForm({...editForm, paysResidence: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                <select value={editForm.paysResidence} onChange={e => setEditForm({...editForm, paysResidence: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500">
+                  <option value="">Choisir un pays</option>
+                  {countryOptions.map((country) => (
+                    <option key={country.code} value={country.code}>{country.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type de client</label>

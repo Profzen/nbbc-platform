@@ -8,6 +8,7 @@ import {
   BarChart2, BookMarked, Calendar, Save, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { getCountryDisplayName } from '@/lib/countries';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type CibleType = 'TOUS' | 'TYPE_CLIENT' | 'GROUPES' | 'SELECTIONNES';
@@ -41,6 +42,15 @@ interface AnalyticsData {
 
 interface Client { _id: string; nom: string; prenom: string; email: string; telephone?: string; typeClient: string; paysResidence?: string; servicesUtilises?: string[]; }
 interface Groupe { _id: string; nom: string; description?: string; couleur: string; clientIds: Client[]; }
+
+type SmsStatusSummary = {
+  accepted?: number;
+  delivered?: number;
+  inProcess?: number;
+  blocked?: number;
+  failed?: number;
+  unknown?: number;
+};
 
 const TYPES_CLIENT = ['PARTICULIER', 'ENTREPRISE', 'INVESTISSEUR', 'PARTENAIRE'];
 
@@ -369,8 +379,8 @@ export default function MarketingPage() {
       // --- Groupes par pays ---
       const byCountry = new Map<string, string[]>();
       allClients.forEach(c => {
-        const pays = (c.paysResidence || '').trim();
-        if (!pays) return;
+        const pays = getCountryDisplayName((c.paysResidence || '').trim());
+        if (!pays || pays === 'INCONNU') return;
         if (!byCountry.has(pays)) byCountry.set(pays, []);
         byCountry.get(pays)!.push(c._id);
       });
@@ -940,6 +950,26 @@ export default function MarketingPage() {
                       {c.dateEnvoi && <span className="flex items-center gap-1.5 text-slate-400"><Clock size={13} />{new Date(c.dateEnvoi).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                     </div>
                   )}
+                  {c.statut === 'ENVOYE' && c.canal === 'SMS' && (() => {
+                    const s: SmsStatusSummary = c.smsStatusSummary || {};
+                    const delivered = Number(s.delivered || 0);
+                    const accepted = Number(s.accepted || 0);
+                    const inProcess = Number(s.inProcess || 0);
+                    const blocked = Number(s.blocked || 0);
+                    const failed = Number(s.failed || 0);
+                    const unknown = Number(s.unknown || 0);
+
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold">Livrés: {delivered}</span>
+                        <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">Acceptés: {accepted}</span>
+                        <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-bold">En cours: {inProcess}</span>
+                        <span className="px-2 py-1 rounded-full bg-orange-50 text-orange-700 font-bold">Bloqués: {blocked}</span>
+                        <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700 font-bold">Échecs: {failed}</span>
+                        {unknown > 0 && <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 font-bold">Inconnus: {unknown}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">

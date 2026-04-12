@@ -5,9 +5,12 @@
  * Les messages SMS utilisent les variables {{prenom}} {{nom}} comme les emails.
  */
 
+import { getCountryDialCode } from '@/lib/countries';
+
 type SendSmsParams = {
   to: string;
   body: string;
+  countryHint?: string;
 };
 
 type SmsSendResult =
@@ -31,18 +34,55 @@ const KINGSMS_TRACE_ENDPOINT = process.env.KINGSMS_TRACE_API_BASE || KINGSMS_END
 /** Indicatif pays par défaut (Togo = 228). Configurable via KINGSMS_DEFAULT_COUNTRY */
 const DEFAULT_COUNTRY = process.env.KINGSMS_DEFAULT_COUNTRY || '228';
 
+function normalizeCountryKey(input?: string): string {
+  return String(input || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function parseCountryDialMapFromEnv(): Record<string, string> {
+  const raw = process.env.KINGSMS_COUNTRY_DIAL_MAP;
+  if (!raw) return {};
+
+  const map: Record<string, string> = {};
+  for (const entry of raw.split(',')) {
+    const [country, dial] = entry.split(':').map((v) => String(v || '').trim());
+    const key = normalizeCountryKey(country);
+    if (!key) continue;
+    const digits = dial.replace(/\D/g, '');
+    if (!digits) continue;
+    map[key] = digits;
+  }
+  return map;
+}
+
+const COUNTRY_DIAL_MAP = parseCountryDialMapFromEnv();
+
+function resolveCountryDialCode(countryHint?: string): string {
+  const key = normalizeCountryKey(countryHint);
+  if (key && COUNTRY_DIAL_MAP[key]) return COUNTRY_DIAL_MAP[key];
+  const resolved = getCountryDialCode(countryHint);
+  if (resolved) return resolved;
+  return DEFAULT_COUNTRY;
+}
+
 /**
  * Normalise un numéro au format international sans + ni 00.
  * Ex: +228 90 44 36 79 → 22890443679
  * Ex: 90443679 → 22890443679 (ajout indicatif par défaut)
  */
-function normalizePhone(input: string): string {
+function normalizePhone(input: string, countryHint?: string): string {
   let phone = (input || '').trim().replace(/[\s\-().]/g, '');
   // Retirer le + ou 00 initial
   phone = phone.replace(/^\+/, '').replace(/^00/, '');
-  // Si le numéro fait 8 chiffres (format local togolais) ou commence par 9/7 et fait 8 chiffres, ajouter indicatif
-  if (/^\d{8}$/.test(phone)) {
-    phone = DEFAULT_COUNTRY + phone;
+  // Si le numéro ne contient pas d'indicatif explicite, utiliser l'indicatif du pays de résidence
+  // (multi-pays), sinon fallback sur l'indicatif par défaut.
+  if (/^\d{7,10}$/.test(phone)) {
+    phone = resolveCountryDialCode(countryHint) + phone;
   }
   return phone;
 }
@@ -52,14 +92,50 @@ function isKingSmsConfigured(): boolean {
 }
 
 function normalizeKingSmsTraceStatus(rawStatus: unknown): KingSmsTraceStatus {
-  const status = String(rawStatus || '').toUpperCase();
-  if (status === 'DLV') return 'DELIVERED';
-  if (status === 'ACT') return 'ACCEPTED';
-  if (status === 'IPR' || status === 'BUF' || status === 'DLG' || status === 'ITM') return 'IN_PROCESS';
-  if (status === 'BLO') return 'BLOCKED';
-  if (status === 'ABS' || status === 'EXP' || status === 'ERD' || status === 'INV' || status === 'NCR' || status === 'NPZ' || status === 'IPV' || status === 'MAX' || status === 'MAP' || status === 'LEN' || status === 'DUP') {
+  const status = String(rawStatus || '').trim().toUpperCase();
+
+  if (
+    status === 'DLV' ||
+    status === 'DELIVERED' ||
+    status === 'DELIVRD' ||
+    status === 'DLVRD' ||
+    status === 'DELIVERY_OK'
+  ) {
+    return 'DELIVERED';
+  }
+
+  if (status === 'ACT' || status === 'ACCEPTED' || status === 'SENT' || status === 'SUBMITTED') {
+    return 'ACCEPTED';
+  }
+
+  if (
+    status === 'IPR' ||
+    status === 'BUF' ||
+    status === 'DLG' ||
+    status === 'ITM' ||
+    status === 'QUEUED' ||
+    status === 'PENDING' ||
+    status === 'IN_PROCESS'
+  ) {
+    return 'IN_PROCESS';
+  }
+
+  if (status === 'BLO' || status === 'BLOCKED' || status === 'BLACKLISTED') return 'BLOCKED';
+
+  if (
+    status === 'ABS' || status === 'EXP' || status === 'ERD' || status === 'INV' || status === 'NCR' ||
+    status === 'NPZ' || status === 'IPV' || status === 'MAX' || status === 'MAP' || status === 'LEN' ||
+    status === 'DUP' || status === 'FAILED' || status === 'UNDELIVERED' || status === 'REJECTED'
+  ) {
     return 'FAILED';
   }
+
+  if (status.includes('DELIV')) return 'DELIVERED';
+  if (status.includes('ACCEPT') || status.includes('SENT')) return 'ACCEPTED';
+  if (status.includes('PEND') || status.includes('QUEUE') || status.includes('PROCESS')) return 'IN_PROCESS';
+  if (status.includes('BLOCK') || status.includes('BLACK')) return 'BLOCKED';
+  if (status.includes('FAIL') || status.includes('REJECT') || status.includes('UNDELIV')) return 'FAILED';
+
   return 'UNKNOWN';
 }
 
@@ -114,11 +190,11 @@ export function isSmsConfigured(): boolean {
   );
 }
 
-async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResult> {
+async function sendViaKingSms({ to, body, countryHint }: SendSmsParams): Promise<SmsSendResult> {
   const apiKey = process.env.KINGSMS_APIKEY;
   const clientId = process.env.KINGSMS_CLIENTID;
   const sender = (process.env.KINGSMS_SENDER || 'NBBC').replace(/['"]/g, '').slice(0, 11);
-  const normalizedTo = normalizePhone(to).replace(/^\+/, '');
+  const normalizedTo = normalizePhone(to, countryHint).replace(/^\+/, '');
 
   if (!apiKey || !clientId) {
     return { success: false, skipped: true, provider: 'KINGSMS', error: 'Provider KingSMS non configure' };
@@ -199,11 +275,11 @@ async function sendViaKingSms({ to, body }: SendSmsParams): Promise<SmsSendResul
   return { success: false, skipped: false, provider: 'KINGSMS', error: lastError || 'Echec envoi KingSMS' };
 }
 
-async function sendViaTwilio({ to, body }: SendSmsParams): Promise<SmsSendResult> {
+async function sendViaTwilio({ to, body, countryHint }: SendSmsParams): Promise<SmsSendResult> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_FROM;
-  const normalizedTo = normalizePhone(to);
+  const normalizedTo = `+${normalizePhone(to, countryHint).replace(/^\+/, '')}`;
 
   if (!accountSid || !authToken || !from) {
     return { success: false, skipped: true, provider: 'TWILIO', error: 'Provider Twilio non configure' };
