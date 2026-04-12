@@ -48,11 +48,11 @@ export type AccountingDepot = {
 };
 
 export function formatCurrencyFCFA(value: number) {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'XAF',
+  const amount = new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+  return `${amount} FCFA`;
 }
 
 export function formatNumber(value: number, maximumFractionDigits = 2) {
