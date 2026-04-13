@@ -79,3 +79,71 @@ Ainsi:
 ### Publication
 - Android: build/signer dans Android Studio puis publication Play Store.
 - iOS: build/signer dans Xcode (macOS requis) puis publication App Store.
+
+## Guide Test iOS (TestFlight) - Etape par etape
+
+Ce guide explique comment tester l'app iOS sans publication immediate sur l'App Store public, via TestFlight.
+
+### Prerequis
+- Un compte Apple Developer actif.
+- Un Mac avec Xcode installe.
+- Un iPhone avec l'app TestFlight installee.
+- Le projet deja disponible sur GitHub.
+
+### 1. Creer l'application dans App Store Connect
+1. Ouvrir App Store Connect.
+2. Aller dans Apps puis cliquer sur New App.
+3. Renseigner:
+	- Nom: NBBC Platform
+	- Bundle ID: com.nbbc.platform
+	- SKU: par exemple nbbc-platform-ios
+4. Valider la creation.
+
+### 2. Preparer le projet iOS sur le Mac
+1. Cloner le repository.
+2. Dans le dossier du projet, executer:
+	- `npm install`
+	- `npx cap sync ios`
+	- `npm run cap:open:ios`
+3. Le projet s'ouvre dans Xcode.
+
+### 3. Configurer la signature dans Xcode
+1. Selectionner la target App.
+2. Ouvrir Signing & Capabilities.
+3. Cocher Automatically manage signing.
+4. Choisir la Team Apple Developer.
+5. Verifier Bundle Identifier = com.nbbc.platform.
+6. Dans General, definir:
+	- Version (ex: 1.0.0)
+	- Build (ex: 1, puis incrementer a chaque envoi)
+
+### 4. Generer une archive
+1. Choisir Any iOS Device (arm64) comme destination.
+2. Menu Product > Archive.
+3. Attendre l'ouverture de Xcode Organizer.
+
+### 5. Envoyer le build vers TestFlight
+1. Dans Organizer, selectionner l'archive.
+2. Cliquer sur Distribute App.
+3. Choisir App Store Connect.
+4. Lancer Upload.
+5. Attendre le message de succes.
+
+### 6. Activer les tests TestFlight
+1. Retourner dans App Store Connect > app > TestFlight.
+2. Attendre le processing Apple (souvent 10 a 30 minutes).
+3. Internal Testing:
+	- Ajouter les membres de l'equipe.
+4. External Testing:
+	- Creer un groupe testeurs.
+	- Soumettre une Beta App Review (premiere validation Apple requise).
+
+### 7. Installation par les testeurs
+1. Le testeur installe TestFlight sur iPhone.
+2. Il recoit une invitation (email ou lien public).
+3. Il installe la build depuis TestFlight.
+
+### Important
+- Un fichier APK Android ne fonctionne pas sur iOS.
+- Un build iOS testable doit etre signe avec les certificats Apple.
+- Sans macOS (local ou CI macOS), on ne peut pas produire un .ipa iOS valide.
