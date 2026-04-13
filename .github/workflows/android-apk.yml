@@ -1,5 +1,8 @@
 name: Build Android APK
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   workflow_dispatch:
   push:
@@ -32,7 +35,7 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses || true
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-36" || sdkmanager "platforms;android-35"
           sdkmanager "build-tools;36.0.0" || sdkmanager "build-tools;35.0.0"
@@ -43,11 +46,21 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
+      - name: Android toolchain info
+        run: |
+          node -v
+          npm -v
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager || true
+          sdkmanager --version || true
+
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
