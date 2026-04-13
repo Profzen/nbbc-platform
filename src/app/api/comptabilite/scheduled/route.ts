@@ -6,6 +6,7 @@ import Compte from '@/models/Compte';
 import ComptaDailyReport from '@/models/ComptaDailyReport';
 import { buildDailyComptaPdfBundle } from '@/lib/compta-daily-report';
 import { sendMail } from '@/lib/mailer';
+import { logActivity } from '@/lib/activity-logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,12 +31,21 @@ async function runDailyComptaReport(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   const url = new URL(req.url);
   const force = url.searchParams.get('force') === '1';
+  const recipientFromQuery = (url.searchParams.get('recipient') || '').trim().toLowerCase();
+  const scheduleLabel = (url.searchParams.get('scheduleLabel') || '').trim();
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ success: false, error: 'Non autorise' }, { status: 401 });
   }
 
-  const recipient = process.env.COMPTA_DAILY_RECIPIENT || 'bowonoudoerazak@gmail.com';
+  const defaultRecipient = process.env.COMPTA_DAILY_RECIPIENT || 'bowonoudoerazak@gmail.com';
+  const recipient = recipientFromQuery || defaultRecipient;
+  if (!emailPattern.test(recipient)) {
+    await logActivity('Export comptable planifie invalide', `Destinataire invalide: ${recipient}`);
+    return NextResponse.json({ success: false, error: 'Destinataire email invalide.' }, { status: 400 });
+  }
   const timeZone = process.env.COMPTA_REPORT_TIMEZONE || 'Africa/Lome';
   const reportDate = getReportDate(timeZone);
 
@@ -44,6 +54,10 @@ async function runDailyComptaReport(req: Request) {
   if (!force) {
     const alreadySent = await ComptaDailyReport.findOne({ reportDate, status: 'SENT' }).lean();
     if (alreadySent) {
+      await logActivity(
+        'Export comptable planifie ignore',
+        `Date ${reportDate} deja envoyee vers ${alreadySent.recipient}${scheduleLabel ? ` (horaire ${scheduleLabel})` : ''}`
+      );
       return NextResponse.json({ success: true, skipped: true, reportDate, message: 'Rapport deja envoye pour cette date.' });
     }
   }
@@ -119,6 +133,10 @@ async function runDailyComptaReport(req: Request) {
       },
       { upsert: true, new: true }
     );
+    await logActivity(
+      'Export comptable planifie echec',
+      `Date ${reportDate} vers ${recipient}${scheduleLabel ? ` (horaire ${scheduleLabel})` : ''} - ${((mailResult as any).error || 'SMTP non configure')}`
+    );
     return NextResponse.json({ success: false, reportDate, error: (mailResult as any).error || 'Email non envoye' }, { status: 500 });
   }
 
@@ -133,6 +151,11 @@ async function runDailyComptaReport(req: Request) {
       errorMessage: null,
     },
     { upsert: true, new: true }
+  );
+
+  await logActivity(
+    'Export comptable planifie envoye',
+    `Date ${reportDate} vers ${recipient} (${attachments.length} PDFs)${scheduleLabel ? ` - horaire ${scheduleLabel}` : ''}`
   );
 
   return NextResponse.json({ success: true, reportDate, recipient, attachments: attachments.length });
