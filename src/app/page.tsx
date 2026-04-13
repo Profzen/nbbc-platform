@@ -6,13 +6,16 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { Users, CreditCard, ShieldCheck, Clock, Download, ArrowRight, Globe } from 'lucide-react';
+import { Users, CreditCard, ShieldCheck, Clock, Download, ArrowRight, Globe, Send } from 'lucide-react';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [manualRecipient, setManualRecipient] = useState('profzzen@gmail.com');
+  const [sendingManualExport, setSendingManualExport] = useState(false);
+  const [manualExportMessage, setManualExportMessage] = useState('');
 
   useEffect(() => {
     fetch('/api/stats')
@@ -22,6 +25,28 @@ export default function Dashboard() {
   }, []);
 
   const exportCSV = () => window.open('/api/export/clients', '_blank');
+
+  const triggerManualComptaExport = async () => {
+    setSendingManualExport(true);
+    setManualExportMessage('');
+    try {
+      const res = await fetch('/api/comptabilite/scheduled/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: manualRecipient }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setManualExportMessage(`Export envoye vers ${data.recipient || manualRecipient} (${data.attachments || 0} PDFs).`);
+      } else {
+        setManualExportMessage(`Echec export: ${data.error || 'Erreur inconnue'}`);
+      }
+    } catch {
+      setManualExportMessage('Echec export: erreur reseau/serveur.');
+    } finally {
+      setSendingManualExport(false);
+    }
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-full min-h-[60vh]">
@@ -41,14 +66,37 @@ export default function Dashboard() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* HEADER */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-8">
+      <header className="flex flex-col gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Tableau de bord</h1>
           <p className="text-slate-500 mt-1 text-sm sm:text-base">Vue d'ensemble de la plateforme NBBC — {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button onClick={exportCSV} className="w-full sm:w-auto justify-center flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow">
-          <Download size={18} /> Exporter Clients CSV
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button onClick={exportCSV} className="w-full sm:w-auto justify-center flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow">
+            <Download size={18} /> Exporter Clients CSV
+          </button>
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border border-slate-200 bg-white p-2">
+            <input
+              type="email"
+              value={manualRecipient}
+              onChange={(e) => setManualRecipient(e.target.value)}
+              placeholder="email destinataire"
+              className="w-full sm:w-64 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={triggerManualComptaExport}
+              disabled={sendingManualExport || !manualRecipient.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {sendingManualExport ? 'Envoi...' : <><Send size={14} /> Envoyer exports compta</>}
+            </button>
+          </div>
+        </div>
+        {manualExportMessage && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+            {manualExportMessage}
+          </div>
+        )}
       </header>
 
       {/* KPI CARDS */}
