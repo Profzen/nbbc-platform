@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android Artifacts
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -13,6 +13,11 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -62,9 +67,70 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Upload APK artifact
+      - name: Build release APK and AAB
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease bundleRelease --stacktrace --no-daemon
+
+      - name: Prepare release signing
+        id: signing
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/release.keystore
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign release APK
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          APK_UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          APK_ALIGNED="android/app/build/outputs/apk/release/app-release-aligned.apk"
+          APK_SIGNED="android/app/build/outputs/apk/release/app-release-signed.apk"
+
+          BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$BUILD_TOOLS_DIR/zipalign" -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks android/release.keystore \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass pass:"$ANDROID_KEY_PASSWORD" \
+            --out "$APK_SIGNED" \
+            "$APK_ALIGNED"
+
+      - name: Sign release AAB
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          jarsigner \
+            -keystore android/release.keystore \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            -signedjar android/app/build/outputs/bundle/release/app-release-signed.aab \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            "$ANDROID_KEY_ALIAS"
+
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: nbbc-platform-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nbbc-platform-release-apk
+          path: |
+            android/app/build/outputs/apk/release/app-release-signed.apk
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nbbc-platform-release-aab
+          path: |
+            android/app/build/outputs/bundle/release/app-release-signed.aab
+            android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
