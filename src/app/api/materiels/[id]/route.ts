@@ -11,8 +11,45 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const session = await getServerSession(authOptions);
   const body = await request.json();
 
-  const materiel = await Materiel.findByIdAndUpdate(id, body, { new: true, runValidators: true });
-  if (!materiel) return NextResponse.json({ success: false, error: 'Matériel introuvable' }, { status: 404 });
+  const existing = await Materiel.findById(id);
+  if (!existing) return NextResponse.json({ success: false, error: 'Matériel introuvable' }, { status: 404 });
+
+  const nextValues = {
+    categorie: body.categorie ?? existing.categorie,
+    categorieAutre: body.categorie === 'AUTRE' || (!body.categorie && existing.categorie === 'AUTRE')
+      ? (body.categorieAutre ?? existing.categorieAutre)
+      : undefined,
+    nombre: body.nombre ?? existing.nombre,
+    couleur: body.couleur ?? existing.couleur,
+    description: body.description ?? existing.description,
+    etat: body.etat ?? existing.etat,
+    actif: existing.actif !== false,
+    deletedAt: existing.deletedAt || null,
+  };
+
+  const materiel = await Materiel.findByIdAndUpdate(
+    id,
+    {
+      $set: {
+        ...body,
+        categorieAutre: nextValues.categorieAutre,
+      },
+      $push: {
+        history: {
+          at: new Date(),
+          action: 'UPDATED',
+          categorie: nextValues.categorie,
+          categorieAutre: nextValues.categorieAutre,
+          nombre: Number(nextValues.nombre || 1),
+          couleur: nextValues.couleur,
+          description: nextValues.description,
+          etat: nextValues.etat,
+          deleted: false,
+        },
+      },
+    },
+    { new: true, runValidators: true }
+  );
 
   const label = materiel.categorie === 'AUTRE' ? materiel.categorieAutre || 'Autre' : materiel.categorie;
 
@@ -42,7 +79,25 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if (!materiel) return NextResponse.json({ success: false, error: 'Matériel introuvable' }, { status: 404 });
 
   const label = materiel.categorie === 'AUTRE' ? materiel.categorieAutre || 'Autre' : materiel.categorie;
-  await materiel.deleteOne();
+  await Materiel.findByIdAndUpdate(id, {
+    $set: {
+      actif: false,
+      deletedAt: new Date(),
+    },
+    $push: {
+      history: {
+        at: new Date(),
+        action: 'DELETED',
+        categorie: materiel.categorie,
+        categorieAutre: materiel.categorieAutre,
+        nombre: materiel.nombre,
+        couleur: materiel.couleur,
+        description: materiel.description,
+        etat: materiel.etat,
+        deleted: true,
+      },
+    },
+  });
 
   await logActivity(
     'Matériel supprimé',

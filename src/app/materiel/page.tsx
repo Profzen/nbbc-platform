@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Edit3, X, Monitor, Smartphone, Cable, Battery, Cpu, HelpCircle, CheckCircle, AlertTriangle, Package } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type Categorie = 'TELEPHONE' | 'CHARGEUR' | 'CABLE' | 'PC' | 'UC' | 'AUTRE';
 type Etat = 'FONCTIONNEL' | 'DYSFONCTIONNEL';
@@ -15,6 +17,20 @@ interface Materiel {
   description?: string;
   etat: Etat;
   createdAt: string;
+  updatedAt?: string;
+  actif?: boolean;
+  deletedAt?: string | null;
+  history?: {
+    at: string;
+    action: 'CREATED' | 'UPDATED' | 'DELETED';
+    categorie: Categorie;
+    categorieAutre?: string;
+    nombre: number;
+    couleur?: string;
+    description?: string;
+    etat: Etat;
+    deleted?: boolean;
+  }[];
 }
 
 const CATEGORIES: { value: Categorie; label: string; icon: React.ElementType }[] = [
@@ -42,6 +58,52 @@ function getCatIcon(cat: Categorie) {
   return CATEGORIES.find(c => c.value === cat)?.icon || Package;
 }
 
+function getTodayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function toISODate(value?: string | Date) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function isOnOrBeforeDate(value: string | Date | undefined, maxDate: string) {
+  if (!value || !maxDate) return false;
+  return toISODate(value) <= maxDate;
+}
+
+function getMaterialSnapshot(material: Materiel, targetDate: string) {
+  const history = [...(material.history || [])].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  const lastRelevant = history.filter((entry) => isOnOrBeforeDate(entry.at, targetDate)).pop();
+
+  if (lastRelevant) {
+    if (lastRelevant.deleted || lastRelevant.action === 'DELETED') return null;
+    return {
+      ...material,
+      categorie: lastRelevant.categorie,
+      categorieAutre: lastRelevant.categorieAutre,
+      nombre: Number(lastRelevant.nombre || 1),
+      couleur: lastRelevant.couleur,
+      description: lastRelevant.description,
+      etat: lastRelevant.etat,
+      actif: true,
+    } as Materiel;
+  }
+
+  if (!isOnOrBeforeDate(material.createdAt, targetDate)) return null;
+  if (material.actif === false && material.deletedAt && !isOnOrBeforeDate(material.deletedAt, targetDate)) {
+    return {
+      ...material,
+      actif: true,
+    } as Materiel;
+  }
+
+  if (material.actif === false && material.deletedAt && isOnOrBeforeDate(material.deletedAt, targetDate)) return null;
+  return material;
+}
+
 export default function MaterielPage() {
   const [materiels, setMateriels] = useState<Materiel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +111,7 @@ export default function MaterielPage() {
   const [editItem, setEditItem] = useState<Materiel | null>(null);
   const [filterCat, setFilterCat] = useState<Categorie | 'ALL'>('ALL');
   const [filterEtat, setFilterEtat] = useState<Etat | 'ALL'>('ALL');
+  const [selectedDate, setSelectedDate] = useState(getTodayISODate());
 
   const [form, setForm] = useState({
     categorie: 'TELEPHONE' as Categorie,
@@ -126,16 +189,59 @@ export default function MaterielPage() {
   };
 
   const filtered = materiels.filter(m => {
+    if (m.actif === false) return false;
     if (filterCat !== 'ALL' && m.categorie !== filterCat) return false;
     if (filterEtat !== 'ALL' && m.etat !== filterEtat) return false;
     return true;
   });
 
+  const materialsAtSelectedDate = useMemo(() => {
+    return materiels
+      .map((material) => getMaterialSnapshot(material, selectedDate))
+      .filter((material): material is Materiel => Boolean(material));
+  }, [materiels, selectedDate]);
+
+  const exportEtatPdf = () => {
+    const doc = new jsPDF();
+    const title = 'Etat du materiel';
+    const total = materialsAtSelectedDate.reduce((sum, item) => sum + Number(item.nombre || 0), 0);
+    const fonctionnels = materialsAtSelectedDate.filter((item) => item.etat === 'FONCTIONNEL').reduce((sum, item) => sum + Number(item.nombre || 0), 0);
+    const dysfonctionnels = materialsAtSelectedDate.filter((item) => item.etat === 'DYSFONCTIONNEL').reduce((sum, item) => sum + Number(item.nombre || 0), 0);
+
+    doc.setFontSize(18);
+    doc.text(title, 14, 16);
+    doc.setFontSize(11);
+    doc.text(`Date de l'etat: ${selectedDate}`, 14, 24);
+    doc.text(`Total pieces: ${total} | Fonctionnels: ${fonctionnels} | Dysfonctionnels: ${dysfonctionnels}`, 14, 31);
+
+    autoTable(doc, {
+      startY: 38,
+      head: [['Categorie', 'Description', 'Nombre', 'Couleur', 'Etat', 'Ajouté le']],
+      body: materialsAtSelectedDate.map((material) => [
+        getCatLabel(material),
+        material.description || '-',
+        String(material.nombre || 0),
+        material.couleur || '-',
+        material.etat,
+        toISODate(material.createdAt),
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [109, 40, 217] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+
+    doc.save(`etat_materiels_${selectedDate}.pdf`);
+  };
+
+  const currentTotalPieces = filtered.reduce((sum, material) => sum + Number(material.nombre || 0), 0);
+  const currentFunctionalPieces = filtered.filter((material) => material.etat === 'FONCTIONNEL').reduce((sum, material) => sum + Number(material.nombre || 0), 0);
+  const currentDysfunctionalPieces = filtered.filter((material) => material.etat === 'DYSFONCTIONNEL').reduce((sum, material) => sum + Number(material.nombre || 0), 0);
+
   const stats = {
-    total: materiels.reduce((s, m) => s + m.nombre, 0),
-    fonctionnel: materiels.filter(m => m.etat === 'FONCTIONNEL').reduce((s, m) => s + m.nombre, 0),
-    dysfonctionnel: materiels.filter(m => m.etat === 'DYSFONCTIONNEL').reduce((s, m) => s + m.nombre, 0),
-    categories: new Set(materiels.map(m => m.categorie)).size,
+    total: currentTotalPieces,
+    fonctionnel: currentFunctionalPieces,
+    dysfonctionnel: currentDysfunctionalPieces,
+    categories: new Set(filtered.map(m => m.categorie)).size,
   };
 
   return (
@@ -219,10 +325,28 @@ export default function MaterielPage() {
           <h1 className="text-2xl font-black text-slate-800">Matériel</h1>
           <p className="text-sm text-slate-500 mt-1">Inventaire du matériel de l&apos;entreprise</p>
         </div>
-        <button onClick={openNew}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-700 text-white font-bold text-sm shadow-md hover:from-violet-700 hover:to-purple-800 transition-all">
-          <Plus size={17} /> Ajouter un matériel
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Date d&apos;état</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value || getTodayISODate())}
+              className="bg-transparent text-sm font-semibold text-slate-700 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={exportEtatPdf}
+            disabled={materialsAtSelectedDate.length === 0}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 font-bold text-sm shadow-sm hover:bg-violet-100 disabled:opacity-50 transition-all"
+          >
+            Exporter l&apos;état PDF
+          </button>
+          <button onClick={openNew}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-700 text-white font-bold text-sm shadow-md hover:from-violet-700 hover:to-purple-800 transition-all">
+            <Plus size={17} /> Ajouter un matériel
+          </button>
+        </div>
       </header>
 
       {/* KPIs */}
@@ -261,6 +385,12 @@ export default function MaterielPage() {
           <option value="FONCTIONNEL">Fonctionnel</option>
           <option value="DYSFONCTIONNEL">Dysfonctionnel</option>
         </select>
+      </div>
+
+      <div className="mb-5 rounded-2xl border border-violet-100 bg-violet-50/50 px-4 py-3 text-sm text-violet-900 flex flex-wrap items-center gap-3">
+        <span className="font-bold">État exportable</span>
+        <span className="text-violet-700">sur la date sélectionnée: {selectedDate}</span>
+        <span className="text-violet-700">• {materialsAtSelectedDate.length} enregistrement(s)</span>
       </div>
 
       {/* Liste */}

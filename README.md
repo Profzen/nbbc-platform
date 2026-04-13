@@ -48,3 +48,34 @@ Ce document résume l'évolution du projet NBBC par rapport au cahier des charge
 
 ---
 *Dernière mise à jour : 15 Mars 2026*
+
+## Mobile App (iOS + Android) avec Capacitor
+
+Cette base web reste active (Vercel) et peut etre reutilisee pour une app hybride Android/iOS.
+
+### Prerequis
+- Node.js installe
+- Android Studio (Android)
+- Xcode (iOS, uniquement sur macOS)
+
+### Scripts utiles
+- `npm run cap:add:android`
+- `npm run cap:add:ios`
+- `npm run cap:sync`
+- `npm run cap:open:android`
+- `npm run cap:open:ios`
+
+### Configuration URL de l'app
+Le fichier `capacitor.config.ts` supporte une URL distante via `CAPACITOR_APP_URL`.
+
+Exemple PowerShell:
+`$env:CAPACITOR_APP_URL="https://votre-domaine-app.com"; npm run cap:sync`
+
+Ainsi:
+- ton site web continue a vivre normalement,
+- la meme logique peut etre exposee dans l'app mobile,
+- les mises a jour backend/web restent possibles en parallele.
+
+### Publication
+- Android: build/signer dans Android Studio puis publication Play Store.
+- iOS: build/signer dans Xcode (macOS requis) puis publication App Store.

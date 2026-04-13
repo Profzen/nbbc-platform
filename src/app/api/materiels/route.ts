@@ -29,6 +29,19 @@ export async function POST(request: Request) {
       couleur,
       description,
       etat: etat || 'FONCTIONNEL',
+      actif: true,
+      deletedAt: null,
+      history: [{
+        at: new Date(),
+        action: 'CREATED',
+        categorie,
+        categorieAutre: categorie === 'AUTRE' ? categorieAutre : undefined,
+        nombre: nombre || 1,
+        couleur,
+        description,
+        etat: etat || 'FONCTIONNEL',
+        deleted: false,
+      }],
     });
 
     const label = categorie === 'AUTRE' ? categorieAutre || 'Autre' : categorie;

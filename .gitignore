@@ -33,6 +33,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# mobile signing/local artifacts
+*.jks
+*.keystore
+android/local.properties
+ios/App/Pods/
+ios/App/build/
+
 # vercel
 .vercel
 
