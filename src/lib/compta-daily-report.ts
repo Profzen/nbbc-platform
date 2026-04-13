@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   computeComptabiliteSummary,
   formatCurrencyFCFA,
@@ -38,162 +39,220 @@ function safeText(value: unknown) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-async function makePdf(title: string, subtitle: string, lines: string[]): Promise<Buffer> {
-  const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-  let page = pdf.addPage([842, 595]);
-  const { width, height } = page.getSize();
-  let y = height - 40;
-
-  const drawHeader = () => {
-    page.drawText('NBBC - Resume comptable', { x: 28, y, size: 12, font: fontBold, color: rgb(0.11, 0.15, 0.25) });
-    y -= 20;
-    page.drawText(title, { x: 28, y, size: 17, font: fontBold, color: rgb(0.06, 0.17, 0.42) });
-    y -= 18;
-    page.drawText(subtitle, { x: 28, y, size: 10, font, color: rgb(0.33, 0.38, 0.45) });
-    y -= 24;
-  };
-
-  const ensureSpace = (need = 14) => {
-    if (y < 26 + need) {
-      page = pdf.addPage([842, 595]);
-      y = page.getSize().height - 36;
-    }
-  };
-
-  drawHeader();
-
-  for (const line of lines) {
-    const text = safeText(line);
-    if (!text) {
-      ensureSpace();
-      y -= 8;
-      continue;
-    }
-
-    const chunks = text.match(/.{1,110}/g) || [''];
-    for (const chunk of chunks) {
-      ensureSpace();
-      page.drawText(chunk, { x: 28, y, size: 10, font, color: rgb(0.15, 0.18, 0.24) });
-      y -= 13;
-    }
-  }
-
-  const bytes = await pdf.save();
-  return Buffer.from(bytes);
+function sanitizePdfText(value: unknown) {
+  return safeText(value)
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2022]/g, '-')
+    .replace(/[\u00A0]/g, ' ')
+    .replace(/[\u2212]/g, '-');
 }
 
-function buildTransactionLines(type: AccountingTransactionType, bundle: ReportBundle): string[] {
+function formatPdfCurrency(value: number) {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+function formatPdfNumber(value: number, maximumFractionDigits = 2) {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits }).format(Number(value || 0));
+}
+
+function createPdfReport(title: string, subtitle: string) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, pageWidth, 56, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(255, 255, 255);
+  doc.text(title, 28, 34);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Genere le ${new Date().toLocaleString('fr-FR')} • ${sanitizePdfText(subtitle)}`, 28, 76);
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(1);
+  doc.line(24, 86, pageWidth - 24, 86);
+
+  const appendPageNumbers = () => {
+    const totalPages = doc.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Page ${page}/${totalPages}`, pageWidth - 72, pageHeight - 18);
+    }
+  };
+
+  return { doc, appendPageNumbers };
+}
+
+function filterEmptyColumns(head: string[], body: string[][]) {
+  const nonEmpty = head.map((_, i) => body.some((row) => (row[i] || '').trim() !== ''));
+  const filteredHead = head.filter((_, i) => nonEmpty[i]);
+  const filteredBody = body.map((row) => row.filter((_, i) => nonEmpty[i]));
+  return { head: filteredHead, body: filteredBody };
+}
+
+function isNumericHeader(headerText: string) {
+  return /^(Qté|PU|Montant|Total|Taux|Solde|Equiv\.|Nombre)$/i.test(headerText.trim());
+}
+
+function applyRichTable(doc: jsPDF, head: string[], body: string[][], options?: { startY?: number }) {
+  const tableWidth = doc.internal.pageSize.getWidth() - 48;
+  const numericHeaders = new Set(head.filter((header) => isNumericHeader(header)));
+
+  autoTable(doc, {
+    startY: options?.startY ?? 92,
+    margin: { left: 24, right: 24, bottom: 34 },
+    tableWidth,
+    head: [head],
+    body,
+    styles: {
+      fontSize: 8,
+      cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
+      overflow: 'linebreak',
+      valign: 'middle',
+      halign: 'left',
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+    },
+    headStyles: {
+      fillColor: [30, 64, 175],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'left',
+      valign: 'middle',
+      lineWidth: 0.6,
+      lineColor: [30, 64, 175],
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+        if (numericHeaders.has(headerText) || isNumericHeader(headerText)) {
+          data.cell.styles.halign = 'center';
+        }
+      }
+      if (data.section === 'body') {
+        const h = head[data.column.index];
+        if (h && (numericHeaders.has(h) || isNumericHeader(h))) {
+          data.cell.styles.halign = 'center';
+        }
+      }
+    },
+    tableLineWidth: 0.35,
+    tableLineColor: [203, 213, 225],
+    theme: 'grid',
+  });
+
+  return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120;
+}
+
+function buildOverviewRows(bundle: ReportBundle) {
+  const day = bundle.summaryDay.totals;
+  const upto = bundle.summaryUpToDay.totals;
+  return {
+    head: ['Indicateur', 'Valeur'],
+    body: [
+      ['Achats du jour', formatPdfCurrency(day.achats)],
+      ['Ventes du jour', formatPdfCurrency(day.ventes)],
+      ['Depenses du jour', formatPdfCurrency(day.depenses)],
+      ['Dettes du jour', formatPdfCurrency(day.dettes)],
+      ['Depots du jour', formatPdfCurrency(day.depots)],
+      ['Retraits du jour', formatPdfCurrency(day.retraits)],
+      ['Total comptes', formatPdfCurrency(upto.totalComptes)],
+      ['Benefice estime', formatPdfCurrency(upto.benefice)],
+      ['Total disponible', formatPdfCurrency(upto.totalDisponible)],
+    ],
+  };
+}
+
+function buildTransactionRows(type: AccountingTransactionType, bundle: ReportBundle) {
   const list = bundle.txDay.filter((t) => t.type === type);
   const accountNameById = new Map(bundle.summaryUpToDay.comptes.map((c) => [String(c._id), c.nom]));
 
-  const lines: string[] = [];
-  lines.push(`Nombre: ${list.length}`);
-  lines.push('');
+  const head = [
+    'Date',
+    type === 'ACHAT' || type === 'VENTE' ? 'Article' : 'Description',
+    'Qté',
+    'PU (FCFA)',
+    'Tiers',
+    'Débit',
+    'Crédit',
+    'Total FCFA',
+  ];
 
-  if (list.length === 0) {
-    lines.push('Aucune transaction pour cette section.');
-    return lines;
-  }
-
-  for (const tx of list) {
+  const body = list.map((tx) => {
     const debitName = accountNameById.get(getAccountId(tx.accountDebitId)) || '-';
     const creditName = accountNameById.get(getAccountId(tx.accountCreditId)) || '-';
-    lines.push(`${String(tx.date).slice(0, 10)} | ${safeText(tx.description)} | Qte ${formatNumber(Number(tx.quantite || 0))} | PU ${formatNumber(Number(tx.prixUnitaire || 0))} ${tx.txCurrency || 'FCFA'} | Total ${formatCurrencyFCFA(Number(tx.amountFCFA || 0))}`);
-    lines.push(`   Debit: ${safeText(debitName)} | Credit: ${safeText(creditName)} | Tiers: ${safeText(tx.tiers || '-')}`);
-  }
+    return [
+      sanitizePdfText(String(tx.date).slice(0, 10)),
+      sanitizePdfText(tx.description),
+      formatPdfNumber(Number(tx.quantite || 0)),
+      formatPdfNumber(Number(tx.prixUnitaire || 0)),
+      sanitizePdfText(tx.tiers || '-'),
+      sanitizePdfText(debitName),
+      sanitizePdfText(creditName),
+      formatPdfCurrency(Number(tx.amountFCFA || 0)),
+    ];
+  });
 
-  const total = list.reduce((sum, tx) => sum + Number(tx.amountFCFA || 0), 0);
-  lines.push('');
-  lines.push(`Total section: ${formatCurrencyFCFA(total)}`);
-  return lines;
+  return filterEmptyColumns(head, body);
 }
 
-function buildDepotLines(bundle: ReportBundle): string[] {
-  const list = bundle.depotsDay;
+function buildDepotRows(bundle: ReportBundle) {
   const accountNameById = new Map(bundle.summaryUpToDay.comptes.map((c) => [String(c._id), c.nom]));
+  const head = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
 
-  const lines: string[] = [];
-  lines.push(`Nombre: ${list.length}`);
-  lines.push('');
-
-  if (list.length === 0) {
-    lines.push('Aucune operation depot/retrait pour cette journee.');
-    return lines;
-  }
-
-  for (const item of list) {
+  const body = bundle.depotsDay.map((item) => {
     const debitName = accountNameById.get(getAccountId(item.compteDebitId || item.compteId)) || '-';
     const creditName = accountNameById.get(getAccountId(item.compteCreditId)) || '-';
-    lines.push(`${String(item.date).slice(0, 10)} | ${item.type} | Operateur ${safeText(item.operateur)} | Montant ${formatCurrencyFCFA(Number(item.montant || 0))}`);
-    lines.push(`   Debit: ${safeText(debitName)} | Credit: ${safeText(creditName)} | Description: ${safeText(item.description || '-')}`);
-  }
+    return [
+      sanitizePdfText(String(item.date).slice(0, 10)),
+      sanitizePdfText(item.type),
+      formatPdfNumber(Number(item.quantite || 1), 0),
+      formatPdfNumber(Number(item.montantUnitaire || 0)),
+      sanitizePdfText(debitName),
+      sanitizePdfText(creditName),
+      sanitizePdfText(item.operateur),
+      formatPdfCurrency(Number(item.montant || 0)),
+    ];
+  });
 
-  const total = list.reduce((sum, item) => sum + Number(item.montant || 0), 0);
-  lines.push('');
-  lines.push(`Total depot/retrait du jour: ${formatCurrencyFCFA(total)}`);
-  return lines;
+  return filterEmptyColumns(head, body);
 }
 
-function buildComptesLines(bundle: ReportBundle): string[] {
-  const lines: string[] = [];
+function buildCompteRows(bundle: ReportBundle) {
   const comptes = [...bundle.summaryUpToDay.comptes].sort((a, b) => String(a.nom).localeCompare(String(b.nom)));
-
-  lines.push(`Etat des comptes a la fin du ${bundle.reportDate}`);
-  lines.push('');
-
-  for (const c of comptes) {
-    lines.push(`${safeText(c.nom)} | Devise ${safeText(c.devise || 'FCFA')} | Taux ${formatNumber(Number(c.tauxFCFA || 1))} | Solde ${formatCurrencyFCFA(Number((c as any).soldeCalculeFCFA || 0))}`);
-  }
-
-  lines.push('');
-  lines.push(`Total comptes: ${formatCurrencyFCFA(bundle.summaryUpToDay.totals.totalComptes)}`);
-  lines.push(`Benefice estime: ${formatCurrencyFCFA(bundle.summaryUpToDay.totals.benefice)}`);
-  lines.push(`Total disponible: ${formatCurrencyFCFA(bundle.summaryUpToDay.totals.totalDisponible)}`);
-  return lines;
+  const head = ['Libellé', 'Devise', 'Taux (1 -> FCFA)', 'Equiv. unités', 'Solde FCFA'];
+  const body = comptes.map((c) => [
+    sanitizePdfText(c.nom),
+    sanitizePdfText(c.devise || 'FCFA'),
+    formatPdfNumber(Number(c.tauxFCFA || 1)),
+    formatPdfNumber(Number((c as any).equivalentUnits || 0)),
+    formatPdfCurrency(Number((c as any).soldeCalculeFCFA || 0)),
+  ]);
+  return filterEmptyColumns(head, body);
 }
 
-function buildEtatLines(bundle: ReportBundle): string[] {
-  const day = bundle.summaryDay.totals;
-  const upto = bundle.summaryUpToDay.totals;
-  return [
-    `Resume du jour ${bundle.reportDate}`,
-    '',
-    `Achats du jour: ${formatCurrencyFCFA(day.achats)}`,
-    `Ventes du jour: ${formatCurrencyFCFA(day.ventes)}`,
-    `Depenses du jour: ${formatCurrencyFCFA(day.depenses)}`,
-    `Dettes du jour: ${formatCurrencyFCFA(day.dettes)}`,
-    `Depots du jour: ${formatCurrencyFCFA(day.depots)}`,
-    `Retraits du jour: ${formatCurrencyFCFA(day.retraits)}`,
-    '',
-    `Etat cumule a fin de journee`,
-    `Total comptes: ${formatCurrencyFCFA(upto.totalComptes)}`,
-    `Benefice estime: ${formatCurrencyFCFA(upto.benefice)}`,
-    `Total disponible: ${formatCurrencyFCFA(upto.totalDisponible)}`,
-  ];
-}
-
-function buildMaterielLines(bundle: ReportBundle): string[] {
-  const items = bundle.materielsEtat || [];
-  const lines: string[] = [];
-  lines.push(`Etat du materiel au ${bundle.reportDate}`);
-  lines.push(`Nombre d'enregistrements: ${items.length}`);
-  lines.push('');
-
-  if (items.length === 0) {
-    lines.push('Aucun materiel actif pour cette date.');
-    return lines;
-  }
-
-  for (const item of items) {
-    lines.push(`${safeText(item.categorie)} | Nombre ${formatNumber(Number(item.nombre || 0), 0)} | Etat ${safeText(item.etat)}`);
-    lines.push(`   Appareil: ${safeText(item.nomAppareil || '-')} | IMEI: ${safeText(item.imei || '-')} | Couleur: ${safeText(item.couleur || '-')}`);
-    lines.push(`   Description: ${safeText(item.description || '-')}`);
-  }
-
-  return lines;
+function buildMaterielRows(bundle: ReportBundle) {
+  const head = ['Catégorie', 'Nom appareil', 'IMEI', 'Nombre', 'Couleur', 'État', 'Description'];
+  const body = (bundle.materielsEtat || []).map((item) => [
+    sanitizePdfText(item.categorie),
+    sanitizePdfText(item.nomAppareil || '-'),
+    sanitizePdfText(item.imei || '-'),
+    formatPdfNumber(Number(item.nombre || 0), 0),
+    sanitizePdfText(item.couleur || '-'),
+    sanitizePdfText(item.etat),
+    sanitizePdfText(item.description || '-'),
+  ]);
+  return filterEmptyColumns(head, body);
 }
 
 export async function buildDailyComptaPdfBundle(input: {
@@ -212,7 +271,7 @@ export async function buildDailyComptaPdfBundle(input: {
     etat: string;
     description?: string;
   }>;
-}): Promise<{ attachments: Attachment[]; summaryDay: ReportBundle['summaryDay']; summaryUpToDay: ReportBundle['summaryUpToDay'] }> {
+}): Promise<{ attachments: Attachment[]; summaryDay: ReturnType<typeof computeComptabiliteSummary>; summaryUpToDay: ReturnType<typeof computeComptabiliteSummary> }> {
   const { reportDate, comptes, transactionsDay, transactionsUpToDay, depotsDay, depotsUpToDay, materielsEtat = [] } = input;
   const summaryDay = computeComptabiliteSummary(comptes, transactionsDay, depotsDay, reportDate);
   const summaryUpToDay = computeComptabiliteSummary(comptes, transactionsUpToDay, depotsUpToDay, reportDate);
@@ -227,49 +286,48 @@ export async function buildDailyComptaPdfBundle(input: {
     materielsEtat,
   };
 
-  const dateSuffix = reportDate;
-  const attachments: Attachment[] = [
-    {
-      filename: `etat_${dateSuffix}.pdf`,
-      content: await makePdf('Etat journalier', `Date: ${reportDate}`, buildEtatLines(bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `achats_${dateSuffix}.pdf`,
-      content: await makePdf('Achats du jour', `Date: ${reportDate}`, buildTransactionLines('ACHAT', bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `ventes_${dateSuffix}.pdf`,
-      content: await makePdf('Ventes du jour', `Date: ${reportDate}`, buildTransactionLines('VENTE', bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `depenses_${dateSuffix}.pdf`,
-      content: await makePdf('Depenses du jour', `Date: ${reportDate}`, buildTransactionLines('DEPENSE', bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `dettes_${dateSuffix}.pdf`,
-      content: await makePdf('Dettes du jour', `Date: ${reportDate}`, buildTransactionLines('DETTE', bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `depots_retraits_${dateSuffix}.pdf`,
-      content: await makePdf('Depots / Retraits du jour', `Date: ${reportDate}`, buildDepotLines(bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `gestion_comptes_${dateSuffix}.pdf`,
-      content: await makePdf('Gestion de compte', `Etat de fin de journee ${reportDate}`, buildComptesLines(bundle)),
-      contentType: 'application/pdf',
-    },
-    {
-      filename: `etat_materiel_${dateSuffix}.pdf`,
-      content: await makePdf('Etat du materiel', `Date: ${reportDate}`, buildMaterielLines(bundle)),
-      contentType: 'application/pdf',
-    },
-  ];
+  const attachments: Attachment[] = [];
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Etat journalier', `Date: ${reportDate}`);
+    const { head, body } = buildOverviewRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `etat_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  for (const type of ['ACHAT', 'VENTE', 'DEPENSE', 'DETTE'] as AccountingTransactionType[]) {
+    const label = type === 'ACHAT' ? 'Achats' : type === 'VENTE' ? 'Ventes' : type === 'DEPENSE' ? 'Depenses' : 'Dettes';
+    const { doc, appendPageNumbers } = createPdfReport(`Rapport ${label}`, `${reportDate} • ${bundle.txDay.filter((t) => t.type === type).length} ligne(s)`);
+    const { head, body } = buildTransactionRows(type, bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `${type.toLowerCase()}s_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Rapport Depots / Retraits', `${reportDate} • ${bundle.depotsDay.length} operation(s)`);
+    const { head, body } = buildDepotRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `depots_retraits_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Rapport Comptes', `${bundle.summaryUpToDay.comptes.length} compte(s)`);
+    const { head, body } = buildCompteRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `gestion_comptes_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Etat du materiel', `${reportDate} • ${materielsEtat.length} enregistrement(s)`);
+    const { head, body } = buildMaterielRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `etat_materiel_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
 
   return { attachments, summaryDay, summaryUpToDay };
 }
