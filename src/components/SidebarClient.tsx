@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Capacitor } from '@capacitor/core';
 import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity } from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
@@ -13,7 +14,12 @@ interface SidebarClientProps {
 
 export default function SidebarClient({ session, pendingKyc }: SidebarClientProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isNativeApp, setIsNativeApp] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    setIsNativeApp(Capacitor.isNativePlatform());
+  }, []);
 
   // Masquer la sidebar sur les pages publiques
   if (pathname.startsWith('/login')) return null;
@@ -47,7 +53,8 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-slate-900 text-white rounded-lg shadow-lg"
+        className={`lg:hidden fixed left-4 z-40 p-2 bg-slate-900 text-white rounded-lg shadow-lg ${isNativeApp ? 'top-2' : 'top-4'}`}
+        style={isNativeApp ? { top: 'max(0.5rem, env(safe-area-inset-top))' } : undefined}
       >
         <Menu size={24} />
       </button>
@@ -131,7 +138,7 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
         </div>
       </aside>
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 pb-[max(env(safe-area-inset-bottom),0px)]">
+      <nav className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 pb-[max(env(safe-area-inset-bottom),0px)] ${isNativeApp ? 'block' : 'hidden'}`}>
         <div className="grid grid-cols-5">
           {mobileTabs.map((tab) => {
             const Icon = tab.icon;

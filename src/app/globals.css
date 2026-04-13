@@ -52,3 +52,26 @@ button:disabled {
   cursor: not-allowed;
   filter: saturate(0.85);
 }
+
+body.native-app {
+  overscroll-behavior-y: contain;
+}
+
+body.native-app .native-main {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+body.native-app .native-page-transition {
+  animation: nativePageIn 180ms ease-out;
+}
+
+@keyframes nativePageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

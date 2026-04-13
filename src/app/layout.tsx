@@ -3,6 +3,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import GlobalLoadingIndicator from "@/components/GlobalLoadingIndicator";
+import NativeAppMode from "@/components/NativeAppMode";
+import NativePageTransition from "@/components/NativePageTransition";
 import { headers } from "next/headers";
 
 export const metadata: Metadata = {
@@ -34,16 +36,17 @@ export default async function RootLayout({
     <html lang="fr">
       <body className="antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
         <AuthProvider>
+          <NativeAppMode />
           <GlobalLoadingIndicator />
           {isPublicPage ? (
-            <main className="flex-1 min-w-0 overflow-y-auto h-full">
-              {children}
+            <main className="flex-1 min-w-0 overflow-y-auto h-full native-main">
+              <NativePageTransition>{children}</NativePageTransition>
             </main>
           ) : (
             <div className="flex h-full w-full min-w-0 overflow-hidden relative">
               <Sidebar />
-              <main className="flex-1 min-w-0 overflow-y-auto h-full pt-16 pb-20 lg:pt-0 lg:pb-0">
-                {children}
+              <main className="flex-1 min-w-0 overflow-y-auto h-full pt-16 pb-20 lg:pt-0 lg:pb-0 native-main">
+                <NativePageTransition>{children}</NativePageTransition>
               </main>
             </div>
           )}
