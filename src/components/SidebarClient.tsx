@@ -35,6 +35,14 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
     ...(isAdmin ? [{ href: '/logs', label: 'Journal d\'activité', icon: Activity }] : []),
   ];
 
+  const mobileTabs = [
+    { href: '/', label: 'Accueil', icon: BarChart3 },
+    { href: '/clients', label: 'Clients', icon: Users },
+    { href: '/cartes', label: 'Comptes', icon: CreditCard },
+    { href: '/marketing', label: 'Market', icon: Megaphone },
+    { href: '/parametres', label: 'Réglages', icon: Settings },
+  ];
+
   return (
     <>
       <button
@@ -122,6 +130,25 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
           </div>
         </div>
       </aside>
+
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 pb-[max(env(safe-area-inset-bottom),0px)]">
+        <div className="grid grid-cols-5">
+          {mobileTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = pathname === tab.href;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${isActive ? 'text-blue-600' : 'text-slate-500'}`}
+              >
+                <Icon size={18} />
+                <span>{tab.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </>
   );
 }
