@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,14 +34,18 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
+    <div className="min-h-[100dvh] bg-slate-50 flex flex-col justify-start sm:justify-center items-center p-4 pt-6 sm:pt-4 pb-[max(env(safe-area-inset-bottom),1rem)] overflow-y-auto">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100 relative overflow-hidden">
         {/* Décoration arriere plan */}
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
         
         <div className="text-center mb-8 mt-2">
           <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner overflow-hidden">
-            <img src="/nbbcl.png" alt="Logo NBBC" width={48} height={48} className="object-contain" />
+            {!logoError ? (
+              <img src="/nbbcl.png" alt="Logo NBBC" width={48} height={48} className="object-contain" onError={() => setLogoError(true)} />
+            ) : (
+              <span className="text-xs font-bold text-blue-700">NBBC</span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Espace Sécurisé NBBC</h1>
           <p className="text-slate-500 text-sm mt-2">Connectez-vous pour accéder à votre tableau de bord</p>
@@ -59,6 +64,7 @@ export default function LoginPage() {
             <input 
               type="email" 
               required
+              autoComplete="email"
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white"
               placeholder="admin@nbbc.com"
               value={email}
@@ -70,6 +76,7 @@ export default function LoginPage() {
             <input 
               type="password" 
               required
+              autoComplete="current-password"
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white"
               placeholder="••••••••"
               value={password}

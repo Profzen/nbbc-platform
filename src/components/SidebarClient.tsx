@@ -42,30 +42,29 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
   ];
 
   const mobileTabs = [
-    { href: '/', label: 'Accueil', icon: BarChart3 },
-    { href: '/clients', label: 'Clients', icon: Users },
-    { href: '/cartes', label: 'Comptes', icon: CreditCard },
-    { href: '/marketing', label: 'Market', icon: Megaphone },
-    { href: '/parametres', label: 'Réglages', icon: Settings },
+    ...navLinks,
+    { href: '/parametres', label: 'Paramètres', icon: Settings },
   ];
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`lg:hidden fixed left-4 z-40 p-2 bg-slate-900 text-white rounded-lg shadow-lg ${isNativeApp ? 'top-2' : 'top-4'}`}
-        style={isNativeApp ? { top: 'max(0.5rem, env(safe-area-inset-top))' } : undefined}
-      >
-        <Menu size={24} />
-      </button>
+      {!isNativeApp && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-slate-900 text-white rounded-lg shadow-lg"
+        >
+          <Menu size={24} />
+        </button>
+      )}
 
-      {isOpen && (
+      {!isNativeApp && isOpen && (
         <div
           className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
+      {!isNativeApp && (
       <aside
         className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col h-full transform transition-transform duration-300 ease-in-out
@@ -137,23 +136,29 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
           </div>
         </div>
       </aside>
+      )}
 
       <nav className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 pb-[max(env(safe-area-inset-bottom),0px)] ${isNativeApp ? 'block' : 'hidden'}`}>
-        <div className="grid grid-cols-5">
-          {mobileTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = pathname === tab.href;
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${isActive ? 'text-blue-600' : 'text-slate-500'}`}
-              >
-                <Icon size={18} />
-                <span>{tab.label}</span>
-              </Link>
-            );
-          })}
+        <div className="overflow-x-auto no-scrollbar">
+          <div className="flex min-w-max gap-1 px-2 py-1.5">
+            {mobileTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = pathname === tab.href;
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`flex-none w-[74px] flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-semibold rounded-lg transition-colors ${isActive ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <Icon size={18} />
+                  <span className="truncate max-w-[68px] text-center">{tab.label}</span>
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{tab.badge}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </nav>
     </>

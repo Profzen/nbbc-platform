@@ -61,6 +61,25 @@ body.native-app .native-main {
   padding-bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
+body.native-app .app-shell {
+  overflow: hidden;
+}
+
+body.native-app .app-content {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 body.native-app .native-page-transition {
   animation: nativePageIn 180ms ease-out;
 }

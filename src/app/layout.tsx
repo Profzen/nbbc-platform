@@ -34,18 +34,18 @@ export default async function RootLayout({
 
   return (
     <html lang="fr">
-      <body className="antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
+      <body className="antialiased bg-slate-50 flex min-h-screen overflow-x-hidden">
         <AuthProvider>
           <NativeAppMode />
           <GlobalLoadingIndicator />
           {isPublicPage ? (
-            <main className="flex-1 min-w-0 overflow-y-auto h-full native-main">
+            <main className="flex-1 min-w-0 overflow-y-auto min-h-[100dvh] native-main app-content">
               <NativePageTransition>{children}</NativePageTransition>
             </main>
           ) : (
-            <div className="flex h-full w-full min-w-0 overflow-hidden relative">
+            <div className="flex min-h-[100dvh] w-full min-w-0 relative app-shell">
               <Sidebar />
-              <main className="flex-1 min-w-0 overflow-y-auto h-full pt-16 pb-20 lg:pt-0 lg:pb-0 native-main">
+              <main className="flex-1 min-w-0 overflow-y-auto pt-16 pb-20 lg:pt-0 lg:pb-0 native-main app-content">
                 <NativePageTransition>{children}</NativePageTransition>
               </main>
             </div>
