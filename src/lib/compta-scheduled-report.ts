@@ -3,6 +3,7 @@ import dbConnect from '@/lib/mongodb';
 import Transaction from '@/models/Transaction';
 import DepotRetrait from '@/models/DepotRetrait';
 import Compte from '@/models/Compte';
+import Materiel from '@/models/Materiel';
 import ComptaDailyReport from '@/models/ComptaDailyReport';
 import { buildDailyComptaPdfBundle } from '@/lib/compta-daily-report';
 import { sendMail } from '@/lib/mailer';
@@ -29,6 +30,46 @@ function getUtcRangeFromReportDate(reportDate: string) {
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 1);
   return { start, end };
+}
+
+function toISODate(value?: string | Date) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function isOnOrBeforeDate(value: string | Date | undefined, maxDate: string) {
+  if (!value || !maxDate) return false;
+  return toISODate(value) <= maxDate;
+}
+
+function getMaterialSnapshot(material: any, targetDate: string) {
+  const history = [...(material.history || [])].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  const lastRelevant = history.filter((entry: any) => isOnOrBeforeDate(entry.at, targetDate)).pop();
+
+  if (lastRelevant) {
+    if (lastRelevant.deleted || lastRelevant.action === 'DELETED') return null;
+    return {
+      ...material,
+      categorie: lastRelevant.categorie,
+      categorieAutre: lastRelevant.categorieAutre,
+      nomAppareil: lastRelevant.nomAppareil,
+      imei: lastRelevant.imei,
+      nombre: Number(lastRelevant.nombre || 1),
+      couleur: lastRelevant.couleur,
+      description: lastRelevant.description,
+      etat: lastRelevant.etat,
+      actif: true,
+    };
+  }
+
+  if (!isOnOrBeforeDate(material.createdAt, targetDate)) return null;
+  if (material.actif === false && material.deletedAt && !isOnOrBeforeDate(material.deletedAt, targetDate)) {
+    return { ...material, actif: true };
+  }
+  if (material.actif === false && material.deletedAt && isOnOrBeforeDate(material.deletedAt, targetDate)) return null;
+  return material;
 }
 
 export async function runComptaScheduledReport(req: Request, options: RunComptaScheduledReportOptions = {}) {
@@ -76,12 +117,13 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
 
   const { start, end } = getUtcRangeFromReportDate(reportDate);
 
-  const [comptesRaw, transactionsDayRaw, transactionsUpToRaw, depotsDayRaw, depotsUpToRaw] = await Promise.all([
+  const [comptesRaw, transactionsDayRaw, transactionsUpToRaw, depotsDayRaw, depotsUpToRaw, materielsRaw] = await Promise.all([
     Compte.find({ actif: true }).lean(),
     Transaction.find({ date: { $gte: start, $lt: end } }).sort({ date: 1 }).lean(),
     Transaction.find({ date: { $lt: end } }).sort({ date: 1 }).lean(),
     DepotRetrait.find({ date: { $gte: start, $lt: end } }).sort({ date: 1 }).lean(),
     DepotRetrait.find({ date: { $lt: end } }).sort({ date: 1 }).lean(),
+    Materiel.find({}).lean(),
   ]);
 
   const comptes = comptesRaw.map((c: any) => ({ ...c, _id: String(c._id) }));
@@ -89,6 +131,18 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
   const transactionsUpToDay = transactionsUpToRaw.map((t: any) => ({ ...t, _id: String(t._id), date: String(t.date), accountDebitId: t.accountDebitId ? String(t.accountDebitId) : null, accountCreditId: t.accountCreditId ? String(t.accountCreditId) : null }));
   const depotsDay = depotsDayRaw.map((d: any) => ({ ...d, _id: String(d._id), date: String(d.date), compteId: d.compteId ? String(d.compteId) : null, compteDebitId: d.compteDebitId ? String(d.compteDebitId) : null, compteCreditId: d.compteCreditId ? String(d.compteCreditId) : null }));
   const depotsUpToDay = depotsUpToRaw.map((d: any) => ({ ...d, _id: String(d._id), date: String(d.date), compteId: d.compteId ? String(d.compteId) : null, compteDebitId: d.compteDebitId ? String(d.compteDebitId) : null, compteCreditId: d.compteCreditId ? String(d.compteCreditId) : null }));
+  const materielsEtat = materielsRaw
+    .map((material: any) => getMaterialSnapshot(material, reportDate))
+    .filter((material: any) => Boolean(material))
+    .map((m: any) => ({
+      categorie: m.categorie === 'AUTRE' ? (m.categorieAutre || 'Autre') : m.categorie,
+      nomAppareil: m.nomAppareil,
+      imei: m.imei,
+      nombre: Number(m.nombre || 0),
+      couleur: m.couleur,
+      etat: m.etat,
+      description: m.description,
+    }));
 
   const { attachments, summaryDay, summaryUpToDay } = await buildDailyComptaPdfBundle({
     reportDate,
@@ -97,6 +151,7 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
     transactionsUpToDay,
     depotsDay,
     depotsUpToDay,
+    materielsEtat,
   });
 
   const subject = `Resume comptable du jour - ${reportDate}`;
@@ -112,6 +167,7 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
         <li>Dettes</li>
         <li>Depots / Retraits</li>
         <li>Gestion de compte (etat fin de journee)</li>
+        <li>Etat du materiel</li>
       </ul>
       <p><strong>Totaux du jour:</strong></p>
       <ul>

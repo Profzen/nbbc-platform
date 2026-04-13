@@ -11,15 +11,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: 'Acces refuse' }, { status: 403 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const recipient = String(body?.recipient || '').trim().toLowerCase();
-
-  if (!recipient) {
-    return NextResponse.json({ success: false, error: 'Destinataire requis' }, { status: 400 });
-  }
-
   return runComptaScheduledReport(req, {
-    recipient,
+    recipient: 'bowonoudoerazak@gmail.com',
     force: true,
     scheduleLabel: 'dashboard-manuel',
     requireCronSecret: false,

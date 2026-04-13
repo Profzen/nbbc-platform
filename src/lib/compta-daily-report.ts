@@ -17,6 +17,15 @@ type ReportBundle = {
   comptes: AccountingCompte[];
   txDay: AccountingTransaction[];
   depotsDay: AccountingDepot[];
+  materielsEtat?: Array<{
+    categorie: string;
+    nomAppareil?: string;
+    imei?: string;
+    nombre: number;
+    couleur?: string;
+    etat: string;
+    description?: string;
+  }>;
 };
 
 type Attachment = {
@@ -166,6 +175,27 @@ function buildEtatLines(bundle: ReportBundle): string[] {
   ];
 }
 
+function buildMaterielLines(bundle: ReportBundle): string[] {
+  const items = bundle.materielsEtat || [];
+  const lines: string[] = [];
+  lines.push(`Etat du materiel au ${bundle.reportDate}`);
+  lines.push(`Nombre d'enregistrements: ${items.length}`);
+  lines.push('');
+
+  if (items.length === 0) {
+    lines.push('Aucun materiel actif pour cette date.');
+    return lines;
+  }
+
+  for (const item of items) {
+    lines.push(`${safeText(item.categorie)} | Nombre ${formatNumber(Number(item.nombre || 0), 0)} | Etat ${safeText(item.etat)}`);
+    lines.push(`   Appareil: ${safeText(item.nomAppareil || '-')} | IMEI: ${safeText(item.imei || '-')} | Couleur: ${safeText(item.couleur || '-')}`);
+    lines.push(`   Description: ${safeText(item.description || '-')}`);
+  }
+
+  return lines;
+}
+
 export async function buildDailyComptaPdfBundle(input: {
   reportDate: string;
   comptes: AccountingCompte[];
@@ -173,8 +203,17 @@ export async function buildDailyComptaPdfBundle(input: {
   transactionsUpToDay: AccountingTransaction[];
   depotsDay: AccountingDepot[];
   depotsUpToDay: AccountingDepot[];
+  materielsEtat?: Array<{
+    categorie: string;
+    nomAppareil?: string;
+    imei?: string;
+    nombre: number;
+    couleur?: string;
+    etat: string;
+    description?: string;
+  }>;
 }): Promise<{ attachments: Attachment[]; summaryDay: ReportBundle['summaryDay']; summaryUpToDay: ReportBundle['summaryUpToDay'] }> {
-  const { reportDate, comptes, transactionsDay, transactionsUpToDay, depotsDay, depotsUpToDay } = input;
+  const { reportDate, comptes, transactionsDay, transactionsUpToDay, depotsDay, depotsUpToDay, materielsEtat = [] } = input;
   const summaryDay = computeComptabiliteSummary(comptes, transactionsDay, depotsDay, reportDate);
   const summaryUpToDay = computeComptabiliteSummary(comptes, transactionsUpToDay, depotsUpToDay, reportDate);
 
@@ -185,6 +224,7 @@ export async function buildDailyComptaPdfBundle(input: {
     comptes,
     txDay: summaryDay.transactions,
     depotsDay: summaryDay.depots,
+    materielsEtat,
   };
 
   const dateSuffix = reportDate;
@@ -222,6 +262,11 @@ export async function buildDailyComptaPdfBundle(input: {
     {
       filename: `gestion_comptes_${dateSuffix}.pdf`,
       content: await makePdf('Gestion de compte', `Etat de fin de journee ${reportDate}`, buildComptesLines(bundle)),
+      contentType: 'application/pdf',
+    },
+    {
+      filename: `etat_materiel_${dateSuffix}.pdf`,
+      content: await makePdf('Etat du materiel', `Date: ${reportDate}`, buildMaterielLines(bundle)),
       contentType: 'application/pdf',
     },
   ];

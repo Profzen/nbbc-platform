@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   return runComptaScheduledReport(req, {
-    recipient: 'profzzen@gmail.com',
+    recipient: 'bowonoudoerazak@gmail.com',
     force: true,
     scheduleLabel: '16:00-GMT-test',
     requireCronSecret: false,
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   return runComptaScheduledReport(req, {
-    recipient: 'profzzen@gmail.com',
+    recipient: 'bowonoudoerazak@gmail.com',
     force: true,
     scheduleLabel: '16:00-GMT-test',
     requireCronSecret: false,
