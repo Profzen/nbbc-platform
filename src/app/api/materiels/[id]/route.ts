@@ -19,6 +19,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     categorieAutre: body.categorie === 'AUTRE' || (!body.categorie && existing.categorie === 'AUTRE')
       ? (body.categorieAutre ?? existing.categorieAutre)
       : undefined,
+    nomAppareil: body.nomAppareil ?? existing.nomAppareil,
+    imei: body.imei ?? existing.imei,
     nombre: body.nombre ?? existing.nombre,
     couleur: body.couleur ?? existing.couleur,
     description: body.description ?? existing.description,
@@ -33,6 +35,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       $set: {
         ...body,
         categorieAutre: nextValues.categorieAutre,
+        nomAppareil: (nextValues.nomAppareil || '').trim() || undefined,
+        imei: (nextValues.imei || '').trim() || undefined,
       },
       $push: {
         history: {
@@ -40,6 +44,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           action: 'UPDATED',
           categorie: nextValues.categorie,
           categorieAutre: nextValues.categorieAutre,
+          nomAppareil: (nextValues.nomAppareil || '').trim() || undefined,
+          imei: (nextValues.imei || '').trim() || undefined,
           nombre: Number(nextValues.nombre || 1),
           couleur: nextValues.couleur,
           description: nextValues.description,
@@ -90,6 +96,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         action: 'DELETED',
         categorie: materiel.categorie,
         categorieAutre: materiel.categorieAutre,
+        nomAppareil: materiel.nomAppareil,
+        imei: materiel.imei,
         nombre: materiel.nombre,
         couleur: materiel.couleur,
         description: materiel.description,

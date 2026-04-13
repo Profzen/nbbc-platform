@@ -12,6 +12,8 @@ interface Materiel {
   _id: string;
   categorie: Categorie;
   categorieAutre?: string;
+  nomAppareil?: string;
+  imei?: string;
   nombre: number;
   couleur?: string;
   description?: string;
@@ -25,6 +27,8 @@ interface Materiel {
     action: 'CREATED' | 'UPDATED' | 'DELETED';
     categorie: Categorie;
     categorieAutre?: string;
+    nomAppareil?: string;
+    imei?: string;
     nombre: number;
     couleur?: string;
     description?: string;
@@ -84,6 +88,8 @@ function getMaterialSnapshot(material: Materiel, targetDate: string) {
       ...material,
       categorie: lastRelevant.categorie,
       categorieAutre: lastRelevant.categorieAutre,
+      nomAppareil: lastRelevant.nomAppareil,
+      imei: lastRelevant.imei,
       nombre: Number(lastRelevant.nombre || 1),
       couleur: lastRelevant.couleur,
       description: lastRelevant.description,
@@ -116,6 +122,8 @@ export default function MaterielPage() {
   const [form, setForm] = useState({
     categorie: 'TELEPHONE' as Categorie,
     categorieAutre: '',
+    nomAppareil: '',
+    imei: '',
     nombre: '1',
     couleur: '',
     description: '',
@@ -136,7 +144,7 @@ export default function MaterielPage() {
   useEffect(() => { fetchMateriels(); }, [fetchMateriels]);
 
   const openNew = () => {
-    setForm({ categorie: 'TELEPHONE', categorieAutre: '', nombre: '1', couleur: '', description: '', etat: 'FONCTIONNEL' });
+    setForm({ categorie: 'TELEPHONE', categorieAutre: '', nomAppareil: '', imei: '', nombre: '1', couleur: '', description: '', etat: 'FONCTIONNEL' });
     setEditItem(null);
     setShowModal(true);
   };
@@ -145,6 +153,8 @@ export default function MaterielPage() {
     setForm({
       categorie: m.categorie,
       categorieAutre: m.categorieAutre || '',
+      nomAppareil: m.nomAppareil || '',
+      imei: m.imei || '',
       nombre: String(m.nombre),
       couleur: m.couleur || '',
       description: m.description || '',
@@ -219,7 +229,7 @@ export default function MaterielPage() {
       head: [['Categorie', 'Description', 'Nombre', 'Couleur', 'Etat', 'Ajouté le']],
       body: materialsAtSelectedDate.map((material) => [
         getCatLabel(material),
-        material.description || '-',
+        [material.nomAppareil, material.imei, material.description].filter(Boolean).join(' | ') || '-',
         String(material.nombre || 0),
         material.couleur || '-',
         material.etat,
@@ -276,6 +286,19 @@ export default function MaterielPage() {
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:outline-none focus:border-violet-400" placeholder="Ex : Imprimante" />
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Nom appareil</label>
+                  <input type="text" value={form.nomAppareil} onChange={e => setForm(f => ({ ...f, nomAppareil: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:outline-none focus:border-violet-400" placeholder="Ex : Samsung A15" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">IMEI</label>
+                  <input type="text" value={form.imei} onChange={e => setForm(f => ({ ...f, imei: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm focus:outline-none focus:border-violet-400" placeholder="Ex : 356938035643809" />
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -420,6 +443,11 @@ export default function MaterielPage() {
                     <div>
                       <div className="font-bold text-slate-800">{getCatLabel(m)}</div>
                       <div className="text-xs text-slate-400">x{m.nombre}{m.couleur ? ` · ${m.couleur}` : ''}</div>
+                      {(m.nomAppareil || m.imei) && (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {m.nomAppareil ? m.nomAppareil : 'Appareil'}{m.imei ? ` · IMEI ${m.imei}` : ''}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1 ml-2 shrink-0">

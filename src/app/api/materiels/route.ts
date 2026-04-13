@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   await dbConnect();
   const session = await getServerSession(authOptions);
   const body = await request.json();
-  const { categorie, categorieAutre, nombre, couleur, description, etat } = body;
+  const { categorie, categorieAutre, nomAppareil, imei, nombre, couleur, description, etat } = body;
 
   if (!categorie) {
     return NextResponse.json({ success: false, error: 'La catégorie est requise.' }, { status: 400 });
@@ -25,6 +25,8 @@ export async function POST(request: Request) {
     const materiel = await Materiel.create({
       categorie,
       categorieAutre: categorie === 'AUTRE' ? categorieAutre : undefined,
+      nomAppareil: (nomAppareil || '').trim() || undefined,
+      imei: (imei || '').trim() || undefined,
       nombre: nombre || 1,
       couleur,
       description,
@@ -36,6 +38,8 @@ export async function POST(request: Request) {
         action: 'CREATED',
         categorie,
         categorieAutre: categorie === 'AUTRE' ? categorieAutre : undefined,
+        nomAppareil: (nomAppareil || '').trim() || undefined,
+        imei: (imei || '').trim() || undefined,
         nombre: nombre || 1,
         couleur,
         description,

@@ -1,24 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import GlobalLoadingIndicator from "@/components/GlobalLoadingIndicator";
 import { headers } from "next/headers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
   title: "NBBC Platform",
   description: "ERP/CRM pour la gestion des clients et services NBBC",
+  icons: {
+    icon: "/nbbcl.png",
+    shortcut: "/nbbcl.png",
+    apple: "/nbbcl.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -37,7 +31,7 @@ export default async function RootLayout({
 
   return (
     <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden`}>
+      <body className="antialiased bg-slate-50 flex min-h-screen md:h-screen overflow-x-hidden md:overflow-hidden">
         <AuthProvider>
           <GlobalLoadingIndicator />
           {isPublicPage ? (

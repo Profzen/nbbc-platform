@@ -10,6 +10,8 @@ export interface IMaterielHistoryEntry {
   action: MaterielHistoryAction;
   categorie: CategorieMateriel;
   categorieAutre?: string;
+  nomAppareil?: string;
+  imei?: string;
   nombre: number;
   couleur?: string;
   description?: string;
@@ -20,6 +22,8 @@ export interface IMaterielHistoryEntry {
 export interface IMateriel extends Document {
   categorie: CategorieMateriel;
   categorieAutre?: string;
+  nomAppareil?: string;
+  imei?: string;
   nombre: number;
   couleur?: string;
   description?: string;
@@ -39,6 +43,8 @@ const MaterielSchema: Schema = new Schema(
       required: true,
     },
     categorieAutre: { type: String },
+    nomAppareil: { type: String },
+    imei: { type: String },
     nombre: { type: Number, required: true, default: 1 },
     couleur: { type: String },
     description: { type: String },
@@ -55,6 +61,8 @@ const MaterielSchema: Schema = new Schema(
         action: { type: String, enum: ['CREATED', 'UPDATED', 'DELETED'], required: true },
         categorie: { type: String, enum: ['TELEPHONE', 'CHARGEUR', 'CABLE', 'PC', 'UC', 'AUTRE'], required: true },
         categorieAutre: { type: String },
+        nomAppareil: { type: String },
+        imei: { type: String },
         nombre: { type: Number, required: true, default: 1 },
         couleur: { type: String },
         description: { type: String },
