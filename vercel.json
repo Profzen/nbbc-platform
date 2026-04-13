@@ -9,8 +9,8 @@
       "schedule": "0 21 * * *"
     },
     {
-      "path": "/api/comptabilite/scheduled?force=1&recipient=profzzen@gmail.com&scheduleLabel=15:10-GMT-test",
-      "schedule": "10 15 * * *"
+      "path": "/api/comptabilite/scheduled-test",
+      "schedule": "0 16 * * *"
     }
   ]
 }
