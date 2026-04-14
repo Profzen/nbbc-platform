@@ -258,8 +258,8 @@ export default function MaterielPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden">
             <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-6 py-4 flex justify-between items-center shrink-0">
               <h2 className="text-white font-bold text-lg">{editItem ? 'Modifier le matériel' : 'Nouveau matériel'}</h2>
               <button onClick={() => setShowModal(false)} className="text-white/70 hover:text-white"><X size={22} /></button>

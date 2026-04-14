@@ -39,13 +39,13 @@ export default async function RootLayout({
           <NativeAppMode />
           <GlobalLoadingIndicator />
           {isPublicPage ? (
-            <main className="flex-1 min-w-0 overflow-y-auto min-h-[100dvh] native-main app-content">
+            <main className="flex-1 min-w-0 overflow-y-auto min-h-[100dvh] native-main app-content min-h-0">
               <NativePageTransition>{children}</NativePageTransition>
             </main>
           ) : (
-            <div className="flex min-h-[100dvh] w-full min-w-0 relative app-shell">
+            <div className="flex h-[100dvh] w-full min-w-0 relative app-shell">
               <Sidebar />
-              <main className="flex-1 min-w-0 overflow-y-auto pt-16 pb-20 lg:pt-0 lg:pb-0 native-main app-content">
+              <main className="flex-1 min-w-0 min-h-0 overflow-y-auto pt-16 pb-20 lg:pt-0 lg:pb-0 native-main app-content">
                 <NativePageTransition>{children}</NativePageTransition>
               </main>
             </div>

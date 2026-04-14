@@ -62,13 +62,21 @@ body.native-app .native-main {
 }
 
 body.native-app .app-shell {
-  overflow: hidden;
+  overflow: visible;
 }
 
 body.native-app .app-content {
+  min-height: 0;
+  height: 100%;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
+}
+
+body.native-app input,
+body.native-app textarea,
+body.native-app select {
+  font-size: 16px;
 }
 
 .no-scrollbar {
