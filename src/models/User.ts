@@ -4,7 +4,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
-  role: 'SUPER_ADMIN' | 'AGENT' | 'ANALYSTE' | 'COMPLIANCE';
+  role: 'SUPER_ADMIN' | 'AGENT' | 'ANALYSTE' | 'COMPLIANCE' | 'TONTINE_CLIENT';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,7 +16,7 @@ const UserSchema: Schema = new Schema(
     password: { type: String }, // Utilisé si authentification "credentials"
     role: { 
       type: String, 
-      enum: ['SUPER_ADMIN', 'AGENT', 'ANALYSTE', 'COMPLIANCE'],
+      enum: ['SUPER_ADMIN', 'AGENT', 'ANALYSTE', 'COMPLIANCE', 'TONTINE_CLIENT'],
       default: 'AGENT' 
     },
   },

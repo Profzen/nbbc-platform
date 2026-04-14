@@ -2,17 +2,9 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import dbConnect from '@/lib/mongodb';
 import User from '@/models/User';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    const role = (session?.user as any)?.role;
-    if (!session || role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Action réservée au SUPER_ADMIN.' }, { status: 403 });
-    }
-
     const { name, email, password } = await req.json();
 
     if (!name || !email || !password) {
@@ -39,7 +31,7 @@ export async function POST(req: Request) {
       name,
       email: normalizedEmail,
       password: hashedPassword,
-      role: 'AGENT'
+      role: 'TONTINE_CLIENT'
     });
 
     return NextResponse.json({ success: true, message: "Compte créé avec succès.", user: { id: user._id, email: user.email, role: user.role } });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Lock } from "lucide-react";
@@ -93,6 +94,17 @@ export default function LoginPage() {
             ) : "Connexion"}
           </button>
         </form>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="font-semibold text-slate-800 mb-1">Nouveau client ?</div>
+          <p className="mb-3">Créez votre compte NBBC directement en quelques secondes.</p>
+          <Link
+            href="/register"
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 font-bold text-white transition-colors hover:bg-slate-800"
+          >
+            Créer un compte client
+          </Link>
+        </div>
 
       </div>
       <p className="text-slate-400 text-sm mt-8">© {new Date().getFullYear()} Plateforme NBBC. Accès restreint.</p>

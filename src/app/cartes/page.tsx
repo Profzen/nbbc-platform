@@ -35,6 +35,7 @@ export default function CartesPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [expandedCarteId, setExpandedCarteId] = useState<string | null>(null);
 
   const fetchCartes = useCallback(async () => {
     setLoading(true);
@@ -244,7 +245,100 @@ export default function CartesPage() {
         </div>
 
         {/* TABLE */}
-        <div className="overflow-x-auto">
+        <div className="md:hidden p-4 space-y-3">
+          {loading ? (
+            <div className="px-6 py-12 text-center text-slate-400">
+              <LoadingSpinner label="Chargement..." size="sm" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Wallet size={28} className="text-slate-400" />
+              </div>
+              <h3 className="font-bold text-slate-700">Aucun compte trouvé</h3>
+              <p className="text-slate-400 text-sm mt-1">Cliquez sur "Nouveau Compte" pour commencer ou ajustez votre recherche.</p>
+            </div>
+          ) : (
+            filtered.map(carte => {
+              const cfg = TYPE_CONFIG[carte.type] || TYPE_CONFIG.AUTRE;
+              const expanded = expandedCarteId === carte._id;
+              return (
+                <article key={carte._id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex items-start gap-3">
+                      <div className={`w-11 h-11 rounded-full ${cfg.bg} ${cfg.color} flex items-center justify-center text-lg font-black border border-white shadow-sm shrink-0`}>
+                        {cfg.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 truncate">{carte.clientId?.prenom} {carte.clientId?.nom}</div>
+                        <div className="text-xs text-slate-500 truncate">{carte.clientId?.email}</div>
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 border border-slate-200">
+                          <span className="font-black">{cfg.icon}</span> {cfg.label}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setExpandedCarteId(expanded ? null : carte._id)}
+                      className="inline-flex items-center gap-1 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 border border-slate-200"
+                    >
+                      Voir plus
+                      <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="mt-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-xl bg-white border border-slate-200 p-3">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Identifiant</div>
+                          <div className="mt-1 text-slate-700 font-mono text-xs break-all">{carte.identifiant}</div>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-3">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Devise</div>
+                          <div className="mt-1 text-slate-700 font-medium">{carte.devise || 'USD'}</div>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-3 col-span-2">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Banque / Plateforme</div>
+                          <div className="mt-1 text-slate-700 font-medium">{carte.banque || '—'}</div>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-3 col-span-2">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Titulaire</div>
+                          <div className="mt-1 text-slate-700 font-medium">{carte.titulaire || '—'}</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-white border border-slate-200 p-3">
+                        <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-2">Statut</div>
+                        {carte.statut === 'ACTIF'
+                          ? <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-bold"><CheckCircle size={14}/> Actif</span>
+                          : <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold"><PauseCircle size={14}/> {carte.statut}</span>
+                        }
+                      </div>
+
+                      {carte.notes && (
+                        <div className="rounded-xl bg-white border border-slate-200 p-3">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-1">Notes</div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{carte.notes}</p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => openEditModal(carte)} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white">
+                          <Pencil size={14} /> Modifier
+                        </button>
+                        <button onClick={() => setConfirmDelete(carte._id)} className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-bold text-rose-600">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs border-b border-slate-200">

@@ -147,3 +147,125 @@ Ce guide explique comment tester l'app iOS sans publication immediate sur l'App 
 - Un fichier APK Android ne fonctionne pas sur iOS.
 - Un build iOS testable doit etre signe avec les certificats Apple.
 - Sans macOS (local ou CI macOS), on ne peut pas produire un .ipa iOS valide.
+
+## Tontine / Epargne Programmee - Spec Produit
+
+Objectif: proposer un produit d'epargne programmee transparent, auditable et simple a comprendre, avec une base blockchain-like pour la preuve, sans forcer toutes les operations sensibles directement on-chain.
+
+### Vision produit
+- Le client ouvre un contrat d'epargne/tontine depuis son compte.
+- Il choisit une periodicite de versement: quotidienne ou hebdomadaire.
+- Il choisit une duree fixe: 3 mois ou 6 mois.
+- La date de debut reelle est la date de souscription.
+- A maturite, le capital cumule est verse vers un compte de destination predefini.
+- Le produit accepte en priorite la crypto, avec support mobile money et carte pour les utilisateurs non crypto.
+
+### Rôles et acces
+- `TONTINE_CLIENT`: client final qui souscrit, verse, consulte son contrat et ses justificatifs.
+- `AGENT`: support, KYC, suivi des incidents, accompagnement des clients.
+- `ANALYSTE`: suivi des performances, reporting, pilotage des cohortes.
+- `COMPLIANCE`: controle KYC/AML, validation des cas sensibles, audit.
+- `SUPER_ADMIN`: configuration globale, parametres de produits, arbitrage manuel.
+
+### Cycle de vie d'un contrat
+- `DRAFT`: contrat prepare mais non signe.
+- `ACTIVE`: contrat souscrit et ouvert a la collecte.
+- `LATE`: au moins un versement est en retard.
+- `AT_RISK`: plusieurs retards consecutifs, risque d'exclusion.
+- `EVICTED`: contrat cloture pour defaut.
+- `WITHDRAWN`: sortie volontaire avant maturite.
+- `MATURED`: contrat arrive a terme et pret pour payout.
+- `PAID_OUT`: fonds verses au destinataire final.
+- `FAILED_PAYOUT`: payout automatique echoue, passage en manuel.
+
+### Regles metier retenues
+- Les versements sont journalises comme des mouvements individuels, pas comme un simple solde calcule.
+- Les alertes de retard doivent partir avant l'exclusion.
+- 3 versements manques consecutifs entrainent l'exclusion du contrat.
+- En cas d'exclusion, remboursement avec penalite de 10%.
+- La sortie volontaire est autorisee, avec penalite de 10%.
+- Le frais plateforme de reference est de 10%.
+- Le contrat doit accepter les conditions generales au moment de la souscription.
+- Le compte de destination est verrouille apres validation du contrat et ne peut etre modifie que via un flux fortement securise.
+- Si le payout automatique echoue, un fallback manuel doit prendre le relais.
+
+### Proposition de regles supplementaires
+- Grace period courte: 24 a 72 heures selon la periodicite avant de marquer un versement comme en retard.
+- Seuil d'exclusion: 3 echeances consecutives non reglees.
+- Duree de traitement apres maturite: tenter l'automatique pendant 24 a 72 heures, puis ouvrir une tache manuelle.
+- Changement de destination: autoriser uniquement via verification forte, journalisation, et delai de securite avant prise d'effet.
+- Cas de defaut prolonge: si le client ne reagit pas apres exclusion et relances, cloture financiere selon les regles contractuelles et gel de nouvelles souscriptions si necessaire.
+
+### Architecture de securite
+- KYC obligatoire avant activation du contrat.
+- Journal d'audit complet pour chaque creation, modification, versement, penalite, exclusion et payout.
+- Ledger en double entree pour tous les mouvements financiers.
+- Webhooks idempotents avec id de transaction unique.
+- Verification de signature sur tous les webhooks provider.
+- Hachage d'ancrage periodique pour la preuve d'integrite du ledger.
+- Separation stricte entre donnees de contrat, mouvements comptables et donnees KYC.
+- Acces admin limite par role, avec traces horodatees et IP si disponible.
+
+### Modele de donnees vise
+- Contrat tontine: client, periodicite, montant, duree, frais, statut, dates, destination.
+- Echeance: date due, statut, montant attendu, montant recu, penalite.
+- Versement: source, rail de paiement, reference provider, montant, devise, statut, idempotency key.
+- Ledger entry: debit, credit, compte, reference, horodatage, auteur systeme.
+- Audit log: action, detail, acteur, role, IP, metadata.
+- Payout request: contrat, montant net, destination, statut, raison d'echec si applicable.
+
+### Rails de paiement
+- Crypto en priorite pour le financement du contrat.
+- Wallet / provider crypto a integrer: Strowallet comme piste principale a etudier.
+- Mobile money et carte pour les utilisateurs sans portefeuille crypto: Paygate ou FedaPay comme options a etudier.
+- Tous les providers doivent respecter: webhook signe, retry, reconciliation, idempotence, journalisation.
+
+### Transparence "blockchain-like"
+- Le systeme reste principalement off-chain pour garder une UX simple et des couts maitrisables.
+- Chaque evenement critique est hashé et journalise.
+- Un hash de lot peut etre ancre periodiquement sur une chaine publique ou un stockage de preuve immutable.
+- La preuve fournie au client doit permettre de verifier l'integrite de son contrat et de ses versements.
+
+### Flux cible
+1. Le client complete son KYC.
+2. Il accepte les conditions generales.
+3. Il choisit periodicite, duree, montant et destination.
+4. Le contrat passe a `ACTIVE` apres validation.
+5. Les versements sont collectes via crypto, mobile money ou carte.
+6. Les retards declenchent des alertes automatiques.
+7. A maturite, le moteur calcule le montant net et lance le payout.
+8. Si le payout echoue, une tache manuelle est ouverte avec trace complete.
+
+### Payout et destination
+- La destination de versement doit etre definie au depart.
+- Toute modification de destination doit demander verification renforcee.
+- La modification ne doit pas etre instantanee si elle augmente le risque de fraude.
+- Il faut conserver l'historique complet des destinations, meme apres changement.
+
+### Anti-fraude et controles
+- Detection de doublons de compte, device ou moyen de paiement.
+- Contrainte sur la frequence des modifications sensibles.
+- Blocage des actions suspectes en cas de mismatch KYC / moyen de paiement.
+- Revue humaine pour les cas a fort montant ou a risque eleve.
+
+### Plan d'implementation
+- Phase 1: creer les modeles tontine, echeance, versement, payout et audit.
+- Phase 2: ajouter le role `TONTINE_CLIENT` dans l'auth et les vues adaptees.
+- Phase 3: construire l'API de souscription, versement, suivi et mutation de contrat.
+- Phase 4: brancher le moteur de relance, retard, exclusion et remboursement.
+- Phase 5: integrer les providers de paiement et les webhooks idempotents.
+- Phase 6: ajouter les ecrans admin et client, puis les exports et preuves PDF.
+- Phase 7: ajouter l'ancrage de preuve et les controles de reconciliation.
+
+### Points encore a valider avec les providers
+- Format exact des webhooks.
+- Gestion des remboursements partiels.
+- Disponibilite des comptes marchands et des destinations de payout.
+- Delais de settlement reel par rail de paiement.
+- Capacite a tracer proprement les references et les echanges de statut.
+
+### Decision actuelle
+- On part sur une architecture hybride: off-chain pour l'exploitation, ledger interne immuable pour la compta, et preuves hashées pour la transparence.
+- Le produit sera concu pour resister aux erreurs de paiement, aux webhooks dupliques, et aux coupures de providers.
+- Les integrations Strowallet, Paygate et FedaPay seront ajoutees seulement apres validation de leurs documentations officielles.
+- Le role `TONTINE_CLIENT` est deja ajoute au modele utilisateur et alimente par l'inscription publique client; le provisioning super-admin reste reserve aux comptes internes.
