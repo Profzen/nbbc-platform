@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
-import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet } from 'lucide-react';
+import { signOut } from 'next-auth/react';
+import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet, LogOut } from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
 interface SidebarClientProps {
@@ -63,6 +64,15 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
                 <div className="text-[11px] text-slate-500 truncate uppercase tracking-wide">{userRole}</div>
               </div>
             </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              aria-label="Déconnexion"
+              title="Déconnexion"
+            >
+              <LogOut size={14} />
+              <span className="leading-none">Déconnexion</span>
+            </button>
           </div>
         </header>
       )}
