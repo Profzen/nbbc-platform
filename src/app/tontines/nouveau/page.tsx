@@ -29,7 +29,8 @@ export default function NouveauTontinePage() {
   };
 
   const validateStep1 = () => {
-    if (!formData.montantVersement || formData.montantVersement <= 0) {
+    const montant = Number(formData.montantVersement);
+    if (!Number.isFinite(montant) || montant <= 0) {
       setError('Le montant du versement doit être supérieur à 0');
       return false;
     }

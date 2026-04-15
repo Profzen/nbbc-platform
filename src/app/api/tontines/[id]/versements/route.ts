@@ -43,7 +43,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params;
     const access = await ensureAccess(id);
-    if (access.error || !access.session || !access.contract) return access.error;
+    if (access.error) return access.error;
+    if (!access.session || !access.contract) {
+      return NextResponse.json({ success: false, error: 'Accès refusé.' }, { status: 403 });
+    }
 
     const body = await request.json();
     const montant = Number(body?.montant);

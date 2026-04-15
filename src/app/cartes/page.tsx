@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, CreditCard, Wallet, X, Trash2, ChevronDown, CheckCircle, PauseCircle } from 'lucide-react';
+import { Plus, Search, CreditCard, Wallet, X, Trash2, ChevronDown, CheckCircle, PauseCircle, Pencil } from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
 const TYPE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: string }> = {
