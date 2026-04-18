@@ -165,6 +165,8 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
         <li>Ventes</li>
         <li>Depenses</li>
         <li>Dettes</li>
+        <li>Gains cumules</li>
+        <li>Épargne cumulee</li>
         <li>Depots / Retraits</li>
         <li>Gestion de compte (etat fin de journee)</li>
         <li>Etat du materiel</li>
@@ -177,6 +179,7 @@ export async function runComptaScheduledReport(req: Request, options: RunComptaS
         <li>Dettes: ${summaryDay.totals.dettes}</li>
       </ul>
       <p><strong>Total disponible (cumule fin de journee):</strong> ${summaryUpToDay.totals.totalDisponible}</p>
+      <p><strong>Épargne cumulée:</strong> ${summaryUpToDay.totals.totalEpargne}</p>
       <p style="color:#64748b;font-size:12px;">Email genere automatiquement par NBBC Platform.</p>
     </div>
   `;

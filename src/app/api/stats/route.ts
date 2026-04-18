@@ -3,6 +3,10 @@ import dbConnect from '@/lib/mongodb';
 import Client from '@/models/Client';
 import Carte from '@/models/Carte';
 import KycRequest from '@/models/KycRequest';
+import Compte from '@/models/Compte';
+import Transaction from '@/models/Transaction';
+import DepotRetrait from '@/models/DepotRetrait';
+import { computeComptabiliteSummary } from '@/lib/accounting';
 
 export async function GET() {
   await dbConnect();
@@ -78,6 +82,31 @@ export async function GET() {
     { $limit: 5 }
   ]);
 
+  const [comptesRaw, transactionsRaw, depotsRaw] = await Promise.all([
+    Compte.find({ actif: true }).lean(),
+    Transaction.find({}).lean(),
+    DepotRetrait.find({}).lean(),
+  ]);
+  const comptaSummary = computeComptabiliteSummary(
+    comptesRaw.map((item: any) => ({ ...item, _id: String(item._id) })),
+    transactionsRaw.map((item: any) => ({
+      ...item,
+      _id: String(item._id),
+      date: String(item.date),
+      accountDebitId: item.accountDebitId ? String(item.accountDebitId) : null,
+      accountCreditId: item.accountCreditId ? String(item.accountCreditId) : null,
+    })),
+    depotsRaw.map((item: any) => ({
+      ...item,
+      _id: String(item._id),
+      date: String(item.date),
+      compteId: item.compteId ? String(item.compteId) : null,
+      compteDebitId: item.compteDebitId ? String(item.compteDebitId) : null,
+      compteCreditId: item.compteCreditId ? String(item.compteCreditId) : null,
+      compteFraisCreditId: item.compteFraisCreditId ? String(item.compteFraisCreditId) : null,
+    }))
+  );
+
   return NextResponse.json({
     success: true,
     data: {
@@ -87,6 +116,7 @@ export async function GET() {
       cartesByType: cartesByType.map(d => ({ name: d._id?.replace('_', ' ') || 'Autre', value: d.count })),
       monthlyData,
       topPays: topPays.map(d => ({ pays: d._id || 'Inconnu', count: d.count })),
+      totalEpargne: comptaSummary.totals.totalEpargne,
     }
   });
 }

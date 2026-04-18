@@ -1,302 +1,421 @@
 # MEMOIRE PROJET - NBBC PLATFORM
 
-Ce document est la reference de continuite du projet. Il doit permettre de reprendre le travail sans perte de contexte, aussi bien pour la version web que pour la version APK/iOS (Capacitor).
+Ce document est la reference durable pour reprendre le projet sans perte de contexte. Il doit rester vivant et etre enrichi au fur et a mesure des evolutions metier, techniques et operatoires.
 
-## 1) Identite du projet
+## 1) Vision produit
 
-- Nom: NBBC Platform
-- Repo: https://github.com/Profzen/nbbc-platform.git
-- Stack principale: Next.js App Router + TypeScript + Tailwind + MongoDB (Mongoose) + NextAuth
-- Cible produit: gestion clients, cartes/comptes, KYC, signature, marketing, comptabilite, et module tontine/epargne programmee
-- Plateformes: Web + Android/iOS via Capacitor
+NBBC Platform est une application de gestion interne et client qui couvre:
+- CRM clients
+- Comptes et moyens de paiement
+- Cartes / comptes rattachés
+- KYC
+- Signature electronique
+- Marketing
+- Comptabilite
+- Tontine / epargne programmee
+- Gains & Epargne
 
-## 2) Principe non negociable
+Objectif permanent:
+- une seule logique metier,
+- une seule base de code,
+- une experience coherente Web + APK Android + iOS Capacitor.
 
-- Parite web/mobile native obligatoire.
-- Toute fonctionnalite doit rester synchronisee entre web et APK/iOS.
-- Pas de duplication de logique metier par plateforme.
-- Une seule source de verite: modeles + routes API + composants responsives.
+Principe cle:
+- la logique vit dans les modeles, routes API et helpers partages;
+- l’UI adapte le rendu selon l’ecran, mais ne duplique pas la regle metier.
 
-## 3) Branchement et flux Git (etat reel)
+## 2) Stack technique
 
-- Branche active: main
-- Branche distante detectee: origin/main
-- Pratique actuelle observee: commits et push directs sur main
-- Implication: verifier fortement avant push (lint/build/tests manuels)
+- Frontend: Next.js App Router (Next 16)
+- UI: React 19 + Tailwind CSS
+- Langage: TypeScript
+- Auth: NextAuth credentials
+- Base de donnees: MongoDB via Mongoose
+- Mobile hybride: Capacitor (Android et iOS)
+- Graphiques: Recharts
+- PDFs / exports: jsPDF + jspdf-autotable
+- Fichiers media: Cloudinary
+- Envoi email: helper mailer interne + SMTP / provider configure
 
-Regles de travail recommandees dans ce contexte:
-- Faire de petits commits fonctionnels et atomiques.
-- Eviter les refactors larges non demandes.
-- Ne jamais casser la parite web/mobile.
-- Toujours valider au minimum par build TypeScript/Next avant push.
+## 3) Organisation du depot
 
-## 4) Architecture technique (vue rapide)
-
-- Front: Next.js 16 (App Router), React 19, Tailwind v4
-- Auth: NextAuth (session + roles)
-- DB: MongoDB via Mongoose
-- Mobile natif: Capacitor (android/ios)
-- UI icons: lucide-react
-- PDF/signature/KYC/marketing/comptabilite deja presents
-
-Dossiers structurants:
-- src/app: pages et routes API
+Arborescence importante:
+- src/app: pages, layouts et routes API
 - src/models: schemas Mongoose
-- src/components: composants partages (sidebar, auth provider, etc.)
-- src/lib: auth, db, generateurs, utilitaires
-- android, ios: wrappers natifs Capacitor
-- public-mobile: webDir mobile configure dans Capacitor
+- src/lib: helpers metier, auth, db, PDF, mail, activity log
+- src/components: composants partages UI
+- public: assets web standard
+- public-mobile: assets embarques pour Capacitor
+- android: projet Android natif Capacitor
+- ios: projet iOS natif Capacitor
+- docs: guides d’exploitation et release
 
-## 5) Authentification et roles
+Regle d’or:
+- ne pas creer de fork web/mobile pour la logique metier;
+- si un comportement change, il doit etre visible dans le code partage et ensuite synchronise vers le natif si besoin.
 
-Roles metier utilises:
+## 4) Parite Web / Mobile
+
+Le projet doit etre pense comme une seule application logique servie sur plusieurs cibles.
+
+Cas 1: app mobile charge l’URL web en production
+- le deploy web suffit si CAPACITOR_APP_URL pointe vers la version de production;
+- l’app mobile affiche alors automatiquement les changements apres mise en ligne.
+
+Cas 2: app mobile embarquee / build natif a reconstruire
+- il faut faire un `npm run build`;
+- puis `npm run cap:sync`;
+- puis reconstruire Android et/ou iOS.
+
+Points importants:
+- sur Windows, Android est prepare / compilable localement;
+- iOS ne se compile pas localement sur Windows, il faut un Mac pour la compilation Xcode;
+- si les assets ou pages changent, il faut verifier `public-mobile` et relancer la synchro Capacitor.
+
+## 5) Capacitor et configuration mobile
+
+Configuration actuelle:
+- `capacitor.config.ts` utilise `webDir: 'public-mobile'`;
+- `CAPACITOR_APP_URL` peut pointer vers la version web de production;
+- en production, l’app mobile peut charger la meme URL que le web si la config le demande.
+
+Guide pratique:
+- changer le code web partage -> deploy web;
+- si le build natif doit embarquer les changements -> `npm run build` puis `npm run cap:sync`;
+- pour Android, ouvrir le projet natif ou lancer la CI;
+- pour iOS, passer par un Mac/Xcode.
+
+## 6) Workflow de livraison mobile
+
+Le flux que l’on suit quand les changements doivent remonter sur mobile:
+1. Developper la fonctionnalite dans le code partage.
+2. Valider TypeScript et le build web.
+3. Faire `npm run cap:sync` si le wrapper natif doit etre mis a jour.
+4. Laisser GitHub Actions produire les artefacts Android.
+5. Recuperer les fichiers de release dans les Actions GitHub.
+
+Artefacts attendus cote GitHub Actions:
+- `nbbc-platform-debug-apk`
+- `nbbc-platform-release-aab`
+- `nbbc-platform-release-apk`
+
+Raccourci mental:
+- si c’est seulement du contenu web ou API partagee, le deploy web suffit pour l’app qui charge l’URL distante;
+- si le packaging natif doit etre mis a jour, il faut synchro + build Android/iOS.
+
+## 7) Authentification et roles
+
+Roles actuellement utilises:
 - SUPER_ADMIN
 - AGENT
 - ANALYSTE
 - COMPLIANCE
 - TONTINE_CLIENT
 
-Regles importantes:
-- Les clients tontine se creent via inscription publique.
-- Le role TONTINE_CLIENT est assigne automatiquement a l'inscription client.
-- La creation d'utilisateurs par l'admin est reservee aux roles internes (notamment AGENT, selon les ecrans/routes deja ajustes).
-- Les endpoints sensibles sont proteges par session.
+Regles:
+- les clients utilisent l’inscription publique;
+- `TONTINE_CLIENT` est attribue a l’inscription client;
+- les routes sensibles doivent rester proteges par session + role;
+- les operations administratives ne doivent pas etre exposées en public.
 
-## 6) Synchronisation web/APK: methode d'uniformisation
+Flux auth:
+- NextAuth credentials;
+- mot de passe hashé;
+- session JWT avec role, id et nom.
 
-Strategie appliquee:
-- Meme backend pour tous (meme routes API).
-- Meme modeles Mongoose.
-- Meme pages React, adaptation uniquement responsive.
-- Detection native uniquement pour ajustements de shell/navigation (ex: top bar native), jamais pour dupliquer la logique metier.
+## 8) Securite critique deja durcie
 
-Pattern UI mobile/desktop retenu:
-- Mobile: cartes + bouton Voir plus (evite le scroll horizontal)
-- Desktop: tableau complet
-- Technique: combiner classes Tailwind du type md:hidden et hidden md:block
+Ancien risque resolu:
+- la route de setup admin etait trop exposee.
 
-Ce pattern est deja applique sur des sections critiques comme:
-- clients
-- cartes/comptes
-- et doit etre la norme pour les nouveaux ecrans de gestion
+Etat actuel:
+- route `setup-admin` en POST;
+- accessible seulement par SUPER_ADMIN connecte;
+- plus de retour de mot de passe en clair;
+- le middleware ne doit pas laisser cette route accessible en public.
 
-## 7) Tontine - socle deja en place
+## 9) Tontine - socle metier deja en place
 
-Modeles crees:
+Modeles:
 - TontineContract
 - TontineEcheance
 - TontineVersement
 
-Routes API creees:
-- /api/tontines (GET/POST)
-- /api/tontines/[id] (GET)
-- /api/tontines/[id]/echeances (GET/POST)
-- /api/tontines/[id]/versements (GET/POST)
+Routes:
+- `/api/tontines` (GET/POST)
+- `/api/tontines/[id]` (GET)
+- `/api/tontines/[id]/echeances` (GET/POST)
+- `/api/tontines/[id]/versements` (GET/POST)
 
-Regles de base deja implementees:
+Regles deja implantees:
 - periodicite: JOURNALIERE ou HEBDOMADAIRE
 - duree: 3 ou 6 mois
-- statut contrat couvrant cycle complet (ACTIVE, LATE, MATURED, etc.)
-- rails de paiement (crypto/mobile money/carte/banque selon schema)
-- idempotency key sur versements
-- controle d'acces: TONTINE_CLIENT voit seulement ses contrats
-- journalisation d'activite integree
+- rails de paiement: CRYPTO, MOBILE_MONEY, CARTE, BANQUE, MANUEL
+- idempotency key sur les versements
+- access control par role
+- auto-generation des echeances a la creation du contrat
 
-UI tontine (etat actuel du socle):
-- Ecran liste/dashboard tontines
-- Ecran creation d'une nouvelle tontine
-- Navigation vers la section tontines dans la sidebar
-- Concu pour web + mobile avec la meme logique
+UI tontine presente:
+- liste tontines
+- creation tontine
+- detail contrat
+- versement
+- historique versements
+- progression / echeances
 
-## 8) Conventions de developpement a respecter
+## 10) Comptabilite - structure generale
 
-- Conserver les API publiques existantes, sauf demande explicite.
-- Eviter de modifier des fichiers hors perimetre de la tache.
-- Garder les styles et patterns UI coherents avec les pages existantes.
-- Prefere des changements minimaux mais complets (pas de demi-correction).
-- Verifier les droits role/session sur toute nouvelle route.
-- Ajouter de la journalisation d'activite pour toute action metier sensible.
-- Sur mobile, privilegier lisibilite et interactions simples (cartes expandables).
+La comptabilite est centralisee dans:
+- `src/app/comptabilite/page.tsx`
+- `src/lib/accounting.ts`
+- `src/lib/compta-daily-report.ts`
+- `src/lib/compta-scheduled-report.ts`
 
-## 9) Commandes de travail utiles
+Ce module gere:
+- achats
+- ventes
+- depenses
+- dettes
+- depots / retraits
+- comptes
+- Gains & Epargne
 
-Developpement:
-- npm run dev
-- npm run lint
-- npm run build
+Principe:
+- les calculs de solde et de total doivent etre faits dans les helpers centraux, pas uniquement dans l’UI.
 
-Capacitor:
-- npm run cap:sync
-- npm run cap:add:android
-- npm run cap:add:ios
-- npm run cap:open:android
-- npm run cap:open:ios
+## 11) Gains & Epargne - regles metier
+
+Ce module appartient a la partie comptabilite.
+
+Types gérés:
+- `GAIN`
+- `EPARGNE_DEPOT`
+- `EPARGNE_RETRAIT`
+
+Règles:
+- un gain est un credit simple, sans debit;
+- un depot d’epargne debite un compte source;
+- le credit principal va sur le compte `Epargne`;
+- les frais de 3,4 % s’appliquent uniquement aux depots d’epargne;
+- les retraits d’epargne ne portent pas ce frais;
+- un retrait d’epargne credite un compte destination choisi;
+- tous les montants doivent accepter les decimales et etre arrondis a 2 chiffres.
+
+Comptes standards ajoutes / attendus:
+- `Epargne`
+- `Frais épargne`
+
+Risque a garder en tete:
+- ne pas casser les anciens enregistrements depot/retrait;
+- rester compatible avec les donnees existantes en prod.
+
+## 12) Comptabilite - calculs et helper central
+
+Le moteur de calcul central est `src/lib/accounting.ts`.
+
+Ce qu’il fait:
+- normalise les comptes;
+- enrique les transactions;
+- enrique les depots/retraits;
+- calcule les soldes par compte;
+- produit un resume comptable cumule jusqu’a une date donnee.
+
+Points a retenir:
+- les calculs doivent rester a 2 decimales;
+- la logique de balance doit rester unique;
+- les nouveaux types de depots sont integres sans casser les anciens;
+- le compte `Epargne` est utilise comme reference pour le total epargne cumule.
+
+## 13) Exports PDF comptables
+
+Le workflow d’export a deux niveaux:
+
+Exports manuels dans la page comptabilite:
+- export des transactions du jour
+- export depots / retraits
+- export comptes
+- export gains cumules
+- export epargne cumulee
+
+Exports automatiques / emails:
+- etat global
+- achats
+- ventes
+- depenses
+- dettes
+- depots / retraits
+- gestion comptes
+- etat materiel
+- gains cumules
+- epargne cumulee
 
 Important:
-- Le projet contient plusieurs lockfiles dans le workspace parent; Next affiche un warning de root inferree.
-- La convention middleware Next est marquee deprecated vers proxy (warning non bloquant, a traiter plus tard proprement).
+- les nouveaux PDFs Gains et Epargne doivent garder le style des autres exports;
+- ils doivent etre cumulatifs jusqu’a la date choisie;
+- ils doivent aussi etre inclus dans le bundle de l’envoi automatique.
 
-## 10) Controle qualite avant push
+## 14) Dashboard principal
 
-Checklist minimum:
-- Build passe sans erreur bloquante.
-- Les pages mobile n'imposent pas de scroll horizontal.
-- Les formulaires restent utilisables avec clavier mobile (overlay et safe area verifies).
-- Les routes API renvoient des erreurs explicites et des codes HTTP coherents.
-- Les roles et droits d'acces sont testes (client vs admin).
-- La navigation fonctionne sur web et APK (menu/sidebar/top bar).
+Le dashboard principal affiche:
+- total clients
+- comptes enregistres
+- KYC valides
+- KYC en attente
+- et maintenant l’`Épargne cumulée`
 
-## 11) Decisions historiques importantes a ne pas perdre
+Il y a un bouton:
+- `Envoyer exports`
 
-- Le client final ne doit pas dependre d'une creation de compte par admin.
-- L'inscription client doit rester simple depuis l'ecran de connexion.
-- Les ecrans denses (clients/cartes/tontines) doivent utiliser le pattern carte + Voir plus sur mobile.
-- Le haut d'ecran natif peut afficher l'utilisateur connecte (nom + initiale) pour occuper l'espace utile.
-- Toute evolution doit garder la coherence entre version web et version APK.
+Ce bouton appelle le flux d’exports comptables automatiques.
 
-## 11-bis) Ne jamais changer sans validation explicite
+## 15) UI comptabilite
 
-Ces points sont verrouilles. Toute modification doit etre validee avant implementation.
+La page `src/app/comptabilite/page.tsx` contient:
+- dashboard comptable
+- onglets metier
+- modales creation / edition
+- tables desktop
+- cartes ou vues simplifiees sur mobile
 
-- Ne pas casser la parite web + APK/iOS.
-- Ne pas dupliquer la logique metier selon la plateforme.
-- Ne pas retirer l'inscription publique client ni l'affectation automatique du role TONTINE_CLIENT.
-- Ne pas exposer des routes sensibles sans session ni contourner les controles de role.
-- Ne pas remplacer le pattern mobile carte + Voir plus par un tableau horizontal sur petit ecran.
-- Ne pas modifier les enums/metiers critiques tontine (periodicite, duree, statuts) sans validation metier.
-- Ne pas supprimer l'idempotence des versements ou les traces de journalisation d'activite.
-- Ne pas changer la branche de livraison (main) ni la strategie de commit/push sans decision explicite.
-- Ne pas introduire des refactors massifs hors perimetre d'une demande.
-- Ne pas fusionner du code non valide par build minimum.
+Regle UI importante:
+- ne pas imposer de tableau horizontal sur un petit ecran si une vue carte est plus lisible.
 
-## 12) Plan de continuation prioritaire (si reprise immediate)
+Nouvelle section a garder en tete:
+- `Gains & Epargne`
 
-1. Verifier en test manuel complet le flow tontine de bout en bout.
-2. Ajouter/finir les vues de detail tontine par contrat.
-3. Connecter pleinement les interactions versements/echeances dans l'UI.
-4. Completer l'automatisation des echeances selon periodicite/duree.
-5. Durcir les scenarios d'erreur payout et fallback manuel.
+Elle doit permettre:
+- creation d’un gain;
+- creation d’un depot d’epargne;
+- creation d’un retrait d’epargne;
+- visualisation du total cumule;
+- export PDF cumule.
 
-## 13) Resume executif de reprise rapide
+## 16) Models et routes critiques
 
-Si contexte oublie, reprendre avec ces regles:
-- Toujours penser web + APK comme une seule app logique.
-- API/modeles partages, UI responsive adaptee.
-- Roles et securite d'abord.
-- Mobile sans scroll horizontal.
-- Commits petits et verifies sur main.
-- Toute fonctionnalite tontine doit rester traçable, auditable et idempotente.
+Collections principales:
+- User
+- Client
+- Carte
+- Compte
+- Transaction
+- DepotRetrait
+- KycRequest
+- SignatureRequest
+- Campaign
+- TontineContract
+- TontineEcheance
+- TontineVersement
 
-## 14) Procedure d'urgence (hotfix en 5 minutes)
+Routes sensibles a ne pas casser:
+- `/api/auth/[...nextauth]`
+- `/api/auth/register`
+- `/api/setup-admin`
+- `/api/comptabilite/*`
+- `/api/tontines/*`
 
-Objectif: corriger vite sans casser la synchro web/APK.
+## 17) Assets et logo
 
-1. Identifier le perimetre exact (page, route, modele, role impacte).
-2. Appliquer le correctif minimal (pas de refactor annexe).
-3. Verifier localement:
-	- npm run build
-	- test manuel rapide web (desktop + mobile viewport)
-	- test manuel APK (navigation + ecran corrige)
-4. Verifier securite:
-	- route protegee si necessaire
-	- pas de regression role/session
-5. Commit atomique clair puis push sur main.
+Le logo login doit exister pour web et mobile.
 
-Raccourci de decision:
-- Si le fix menace la parite web/APK, stopper et corriger l'approche avant merge.
-- Si le fix touche auth/roles/tontine ledger, exiger verification manuelle renforcee.
-
-## 15) Definition of Done (DoD) obligatoire
-
-Une tache est consideree terminee seulement si:
-
-- La fonctionnalite marche sur web et APK avec comportement coherent.
-- Aucune casse responsive mobile (pas de scroll horizontal non voulu).
-- Les erreurs utilisateur sont explicites (messages clairs, HTTP coherent cote API).
-- Les controles d'acces sont valides (client vs roles internes).
-- Le build passe sans erreur bloquante.
-- Les impacts nav/shell mobile sont verifies si la page est dans le flux principal.
-
-## 16) Protocole de test synchronise web + APK
-
-Toujours tester les memes cas des deux cotes.
-
-Cas minimum front:
-- Ouverture page liste
-- Recherche/filtre si disponible
-- Action primaire (creer, modifier, supprimer, soumettre)
-- Etat vide
-- Etat erreur
-- Etat loading
-- Retour navigation (back, menu, onglets)
-
-Cas minimum metier/API:
-- Session absente -> acces refuse
-- Session valide role client -> acces scope utilisateur
-- Session role interne -> acces etendu selon regles
-- Validation des champs obligatoires
-- Reponses d'erreur stables (format success/error)
-
-Cas minimum mobile natif:
-- Header/top bar visible et lisible
-- Clavier n'ecrase pas les champs/formulaires critiques
-- Boutons d'action accessibles sans debordement
-- Scroll vertical fluide, aucun debordement lateral
-
-## 17) Convention de commit et messages
-
-Format recommande:
-- feat(scope): ajout fonctionnel
-- fix(scope): correction
-- refactor(scope): refonte sans changement fonctionnel
-- chore(scope): maintenance technique
-
-Exemples:
-- feat(tontine): add responsive contracts dashboard web+apk parity
-- fix(mobile): prevent horizontal overflow on clients cards
-- fix(auth): enforce role guard on register-related route
+Emplacements importants:
+- `public/nbbcl.png`
+- `public-mobile/nbbcl.png`
 
 Regle:
-- Un commit = une intention metier principale.
-- Eviter les commits melanges (UI + gros backend non lies) quand possible.
+- si un logo ou un asset change et que l’app mobile embarque le contenu local, il faut synchroniser `public-mobile` puis lancer Capacitor sync.
 
-## 18) Garde-fous specifiques tontine
+## 18) Build, tests et qualite
 
-Ne jamais perdre ces invariants:
+Commandes utiles:
+- `npm run dev`
+- `npm run build`
+- `npx tsc --noEmit`
+- `npm run cap:sync`
+- `npm run cap:open:android`
+- `npm run cap:open:ios`
 
-- Chaque versement doit rester traçable (reference, timestamp, acteur/systeme).
-- L'idempotency key ne doit pas etre retiree des flux de paiement.
-- Les transitions de statut contrat doivent rester coherentes avec le cycle de vie.
-- Les montants et penalites doivent etre calculables et auditables a posteriori.
-- Toute action sensible doit laisser une trace dans l'activite/audit.
+Definition of Done minimale:
+- TypeScript propre;
+- build Next OK;
+- pas de regression role/session;
+- pas de regression mobile;
+- test web valide;
+- si necessaire, test mobile ou build natif valide.
 
-Verification rapide tontine avant livraison:
+## 19) GitHub Actions et recuperation des builds
 
-1. Creation contrat ok.
-2. Lecture liste/contrat scopee par role.
-3. Versement enregistre sans doublon (idempotence).
-4. Echeance mise a jour selon encaissement.
-5. UI mobile et desktop lisibles sans scroll horizontal parasite.
+Le workflow Android passe par GitHub Actions.
 
-## 19) Procedure de reprise apres interruption longue
+Mode operatoire habituel:
+- tu pousses le code;
+- tu vas dans l’onglet Actions sur GitHub;
+- tu attends la fin du build;
+- tu telecharges les artefacts generes.
 
-Quand le contexte est perdu:
+Artefacts a recuperer:
+- `nbbc-platform-debug-apk`
+- `nbbc-platform-release-aab`
+- `nbbc-platform-release-apk`
 
-1. Lire ce fichier en entier.
-2. Confirmer branche et etat git (main + fichiers modifies).
-3. Rejouer un build local.
-4. Relire les modeles et routes du perimetre vise.
-5. Executer un mini test web+APK du flux cible.
-6. Reprendre uniquement avec des changements minimaux et verifies.
+Regle d’exploitation:
+- si une modification web doit aussi exister dans l’app mobile, il faut verifier que la synchro Capacitor et le workflow GitHub Actions ont bien pris la nouvelle version.
 
-## 20) Mode operatoire permanent
+## 20) Outils de release mobile
 
-Ligne directrice finale:
+Si le changement est purement web et que l’app mobile pointe vers l’URL de production:
+- deploy web suffisant.
 
-- Concevoir une seule logique produit.
-- Exposer cette logique via routes/API/modeles communs.
-- Adapter l'UX par responsive, pas par fork metier par plateforme.
-- Securiser auth/roles/audit en priorite.
-- Livrer petit, verifier fort, pousser propre sur main.
+Si le changement doit etre embarque dans le natif:
+1. `npm run build`
+2. `npm run cap:sync`
+3. Android: build via Android Studio ou CI
+4. iOS: build via Xcode sur Mac
 
-Fin du document memoire.
+Si un doute existe:
+- verifier d’abord si l’app mobile charge l’URL distante ou le bundle embarque.
+
+## 21) Routines de travail
+
+Regles de travail permanentes:
+- faire des changements petits et coherents;
+- ne pas casser la parite web/mobile;
+- ne pas faire de refactor massif hors demande;
+- valider au minimum TypeScript avant de considerer la tache terminee;
+- si l’app mobile peut etre impactee, penser sync Capacitor ou rebuild native.
+
+## 22) Checklist de verification rapide
+
+Avant livraison, verifier au minimum:
+- login;
+- inscription client;
+- acces protege;
+- navigation responsive;
+- comptabilite et exports;
+- mobile native / Capacitor si le changement impacte l’interface ou les assets.
+
+## 23) Procedure de reprise apres oubli de contexte
+
+Si le contexte est perdu:
+1. Relire ce fichier en entier.
+2. Verifier l’arborescence et les fichiers principaux.
+3. Relancer TypeScript / build.
+4. Rejouer les endpoints et ecrans concernes.
+5. Verifier si la partie mobile doit aussi etre synchronisee.
+6. Reprendre avec des changements minimaux et verifies.
+
+## 24) Points sensibles a ne pas casser
+
+- auth credentials + roles;
+- routes sensibles;
+- setup-admin;
+- idempotence des versements;
+- responsive mobile;
+- public-mobile pour les assets natifs;
+- calculs comptables a 2 decimales;
+- compatibilite des anciens enregistrements.
+
+## 25) Resume executif
+
+NBBC Platform est une seule application logique rendue sur plusieurs cibles. Le web et la partie mobile hybride partagent les memes modeles, les memes routes et la plupart des composants. La release mobile doit etre consideree a chaque changement qui touche le rendu, les assets ou la logique metier. Pour les builds Android, GitHub Actions est le point de recuperation des artefacts de release, et pour iOS il faut passer par un environnement Mac/Xcode. Le fichier memoire doit rester la source de verite pour reprendre le projet rapidement.
+
+Fin du document.

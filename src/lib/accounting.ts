@@ -34,18 +34,26 @@ export type AccountingTransaction = {
 
 export type AccountingDepot = {
   _id: string;
-  type: 'DEPOT' | 'RETRAIT';
+  type: 'DEPOT' | 'RETRAIT' | 'GAIN' | 'EPARGNE_DEPOT' | 'EPARGNE_RETRAIT';
   date: string;
   montant: number;
   quantite?: number;
   montantUnitaire?: number;
+  montantNet?: number;
+  fraisPourcentage?: number;
+  fraisMontant?: number;
   operateur: string;
   compteId?: string | { _id?: string; nom?: string } | null;
   compteDebitId?: string | { _id?: string; nom?: string } | null;
   compteCreditId?: string | { _id?: string; nom?: string } | null;
+  compteFraisCreditId?: string | { _id?: string; nom?: string } | null;
   description?: string;
   notes?: string;
 };
+
+export function round2(value: number) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
 
 export function formatCurrencyFCFA(value: number) {
   const amount = new Intl.NumberFormat('fr-FR', {
@@ -94,8 +102,8 @@ export function computeAmountFCFA(amount: number, currency: string | undefined, 
   const normalizedAmount = Number(amount || 0);
   const normalizedCurrency = currency || 'FCFA';
   // Si la devise est FCFA ou si le taux est 1 (devise identique), ne pas appliquer de conversion
-  if (normalizedCurrency === 'FCFA' || Number(rateUsed) === 1) return normalizedAmount;
-  return Math.round(normalizedAmount * Number(rateUsed || 1) * 100) / 100;
+  if (normalizedCurrency === 'FCFA' || Number(rateUsed) === 1) return round2(normalizedAmount);
+  return round2(normalizedAmount * Number(rateUsed || 1));
 }
 
 export function getPreferredRate(currency: string | undefined, date: string | undefined, comptes: AccountingCompte[], transactions: AccountingTransaction[]) {
@@ -141,12 +149,12 @@ export function enrichTransactions(transactions: AccountingTransaction[], compte
       } else {
         amountFCFA = amount * (creditAccountTaux || 1);
       }
-      amountFCFA = Math.round(amountFCFA * 100) / 100;
+      amountFCFA = round2(amountFCFA);
     }
     return {
       ...tx,
-      montant: amount,
-      amountFCFA,
+      montant: round2(amount),
+      amountFCFA: round2(amountFCFA),
     };
   });
 }
@@ -155,14 +163,61 @@ export function enrichDepots(depots: AccountingDepot[]) {
   return depots.map((depot) => {
     const quantite = Number(depot.quantite || 1);
     const montantUnitaire = Number(depot.montantUnitaire || depot.montant || 0);
-    const montant = Number(depot.montant || quantite * montantUnitaire);
+    const montant = round2(Number(depot.montant || quantite * montantUnitaire));
+    const fraisPourcentage = typeof depot.fraisPourcentage === 'number' ? round2(depot.fraisPourcentage) : undefined;
+    const fraisMontant = typeof depot.fraisMontant === 'number'
+      ? round2(depot.fraisMontant)
+      : depot.type === 'EPARGNE_DEPOT' && fraisPourcentage !== undefined
+        ? round2((montant * fraisPourcentage) / 100)
+        : undefined;
+    const montantNet = typeof depot.montantNet === 'number'
+      ? round2(depot.montantNet)
+      : depot.type === 'EPARGNE_DEPOT'
+        ? round2(montant - Number(fraisMontant || 0))
+        : montant;
     return {
       ...depot,
       quantite,
       montantUnitaire,
       montant,
+      montantNet,
+      fraisPourcentage,
+      fraisMontant,
     };
   });
+}
+
+function getDepotEvents(depot: AccountingDepot) {
+  const debitId = getAccountId(depot.compteDebitId || depot.compteId);
+  const creditId = getAccountId(depot.compteCreditId);
+  const feeCreditId = getAccountId(depot.compteFraisCreditId);
+  const baseAmount = round2(Number(depot.montant || 0));
+  const netAmount = round2(Number(depot.montantNet || baseAmount));
+  const feeAmount = round2(Number(depot.fraisMontant || 0));
+
+  if (depot.type === 'GAIN') {
+    return [{ amountFCFA: baseAmount, debitId: '', creditId }];
+  }
+
+  if (depot.type === 'EPARGNE_DEPOT') {
+    const events = [] as Array<{ amountFCFA: number; debitId: string; creditId: string }>;
+    if (debitId) {
+      events.push({ amountFCFA: baseAmount, debitId, creditId: '' });
+    }
+    if (creditId) {
+      events.push({ amountFCFA: netAmount, debitId: '', creditId });
+    }
+    if (feeCreditId && feeAmount > 0) {
+      events.push({ amountFCFA: feeAmount, debitId: '', creditId: feeCreditId });
+    }
+    return events;
+  }
+
+  if (depot.type === 'EPARGNE_RETRAIT') {
+    return [{ amountFCFA: baseAmount, debitId, creditId }];
+  }
+
+  return [{ amountFCFA: baseAmount, debitId, creditId }];
 }
 
 export function computeAccountBalances(comptesRaw: AccountingCompte[], transactionsRaw: AccountingTransaction[], depotsRaw: AccountingDepot[]) {
@@ -172,8 +227,8 @@ export function computeAccountBalances(comptesRaw: AccountingCompte[], transacti
       compte._id,
       {
         ...compte,
-        soldeInitialFCFA: Math.round(Number(compte.soldeInitialUnites || 0) * Number(compte.tauxFCFA || 1) * 100) / 100,
-        soldeCalculeFCFA: Math.round(Number(compte.soldeInitialUnites || 0) * Number(compte.tauxFCFA || 1) * 100) / 100,
+        soldeInitialFCFA: round2(Number(compte.soldeInitialUnites || 0) * Number(compte.tauxFCFA || 1)),
+        soldeCalculeFCFA: round2(Number(compte.soldeInitialUnites || 0) * Number(compte.tauxFCFA || 1)),
       },
     ])
   );
@@ -186,23 +241,23 @@ export function computeAccountBalances(comptesRaw: AccountingCompte[], transacti
       debitId: getAccountId(tx.accountDebitId),
       creditId: getAccountId(tx.accountCreditId),
     })),
-    ...depotsRaw.map((depot) => ({
-      id: depot._id,
+    ...depotsRaw.flatMap((depot) => getDepotEvents(depot).map((event, index) => ({
+      id: `${depot._id}:${index}`,
       date: String(depot.date || '').slice(0, 10),
-      amountFCFA: Number(depot.montant || 0),
-      debitId: getAccountId(depot.compteDebitId || depot.compteId),
-      creditId: getAccountId(depot.compteCreditId),
-    })),
+      amountFCFA: round2(event.amountFCFA),
+      debitId: event.debitId,
+      creditId: event.creditId,
+    }))),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
   for (const event of events) {
     if (event.debitId && accountMap.has(event.debitId)) {
       const compte = accountMap.get(event.debitId)!;
-      compte.soldeCalculeFCFA = Math.round((compte.soldeCalculeFCFA - event.amountFCFA) * 100) / 100;
+      compte.soldeCalculeFCFA = round2(compte.soldeCalculeFCFA - event.amountFCFA);
     }
     if (event.creditId && accountMap.has(event.creditId)) {
       const compte = accountMap.get(event.creditId)!;
-      compte.soldeCalculeFCFA = Math.round((compte.soldeCalculeFCFA + event.amountFCFA) * 100) / 100;
+      compte.soldeCalculeFCFA = round2(compte.soldeCalculeFCFA + event.amountFCFA);
     }
   }
 
@@ -210,7 +265,7 @@ export function computeAccountBalances(comptesRaw: AccountingCompte[], transacti
     const current = accountMap.get(compte._id)!;
     return {
       ...current,
-      equivalentUnits: Number(current.tauxFCFA || 1) > 0 ? Math.round((current.soldeCalculeFCFA / Number(current.tauxFCFA || 1)) * 100) / 100 : 0,
+      equivalentUnits: Number(current.tauxFCFA || 1) > 0 ? round2(current.soldeCalculeFCFA / Number(current.tauxFCFA || 1)) : 0,
     };
   });
 }
@@ -231,6 +286,11 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const totalDettes = dettes.reduce((sum, tx) => sum + Number(tx.amountFCFA || 0), 0);
   const totalDepots = depots.filter((item) => item.type === 'DEPOT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
   const totalRetraits = depots.filter((item) => item.type === 'RETRAIT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
+  const totalGains = depots.filter((item) => item.type === 'GAIN').reduce((sum, item) => sum + Number(item.montant || 0), 0);
+  const totalEpargneDepots = depots.filter((item) => item.type === 'EPARGNE_DEPOT').reduce((sum, item) => sum + Number(item.montantNet || 0), 0);
+  const totalEpargneRetraits = depots.filter((item) => item.type === 'EPARGNE_RETRAIT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
+  const totalEpargne = round2(comptes.find((compte) => String(compte.nom || '').trim().toLowerCase() === 'epargne')?.soldeCalculeFCFA || 0);
+  const totalFraisEpargne = depots.filter((item) => item.type === 'EPARGNE_DEPOT').reduce((sum, item) => sum + Number(item.fraisMontant || 0), 0);
 
   const totalQtyAchats = achats.reduce((sum, tx) => sum + Number(tx.quantite || 0), 0);
   const totalQtyVentes = ventes.reduce((sum, tx) => sum + Number(tx.quantite || 0), 0);
@@ -239,7 +299,7 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const benefice = Math.round(((avgUnitVente - avgUnitAchat) * totalQtyVentes) * 100) / 100;
 
   const totalComptes = comptes.reduce((sum, compte) => sum + Number(compte.soldeCalculeFCFA || 0), 0);
-  const totalDisponible = Math.round((totalComptes + benefice - totalDepenses - totalDettes) * 100) / 100;
+  const totalDisponible = round2(totalComptes + benefice - totalDepenses - totalDettes);
 
   const monthlyMap = new Map<string, { month: string; ACHAT: number; VENTE: number; DEPENSE: number; DETTE: number }>();
   const now = referenceDate ? new Date(referenceDate) : new Date();
@@ -267,6 +327,11 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
       dettes: totalDettes,
       depots: totalDepots,
       retraits: totalRetraits,
+      gains: totalGains,
+      epargneDepots: totalEpargneDepots,
+      epargneRetraits: totalEpargneRetraits,
+      totalEpargne,
+      fraisEpargne: totalFraisEpargne,
       benefice,
       totalComptes,
       totalDisponible,

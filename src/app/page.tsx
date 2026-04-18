@@ -10,6 +10,10 @@ import { Users, CreditCard, ShieldCheck, Clock, Download, ArrowRight, Globe, Sen
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0)) + ' FCFA';
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -52,13 +56,14 @@ export default function Dashboard() {
     </div>
   );
 
-  const { totaux, monthlyData, clientsByType, clientsByService, cartesByType, topPays } = stats || {};
+  const { totaux, monthlyData, clientsByType, clientsByService, cartesByType, topPays, totalEpargne } = stats || {};
 
   const kpiCards = [
     { title: 'Total Clients', value: totaux?.totalClients ?? 0, icon: Users, color: 'from-blue-500 to-indigo-600', link: '/clients' },
     { title: 'Comptes Enregistrés', value: totaux?.totalCartes ?? 0, icon: CreditCard, color: 'from-emerald-500 to-teal-600', link: '/cartes' },
     { title: 'KYC Validés', value: totaux?.kycValide ?? 0, icon: ShieldCheck, color: 'from-green-500 to-emerald-600', link: '/kyc' },
     { title: 'KYC En attente', value: totaux?.kycEnAttente ?? 0, icon: Clock, color: 'from-amber-500 to-orange-600', link: '/kyc' },
+    { title: 'Épargne cumulée', value: formatMoney(totalEpargne ?? 0), icon: Download, color: 'from-sky-500 to-cyan-600', link: '/comptabilite' },
   ];
 
   return (
@@ -89,7 +94,7 @@ export default function Dashboard() {
       </header>
 
       {/* KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5 mb-8">
         {kpiCards.map((kpi, i) => {
           const Icon = kpi.icon;
           return (

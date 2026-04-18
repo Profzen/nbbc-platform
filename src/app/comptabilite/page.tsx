@@ -34,7 +34,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 
 const DEFAULT_USD_RATE = 590;
 
-type SectionId = 'dashboard' | 'achats' | 'ventes' | 'depenses' | 'dettes' | 'depots' | 'comptes';
+type SectionId = 'dashboard' | 'achats' | 'ventes' | 'depenses' | 'dettes' | 'depots' | 'gains-epargne' | 'comptes';
 
 type TxFormState = {
   editId: string;
@@ -53,12 +53,16 @@ type TxFormState = {
 
 type DepotFormState = {
   editId: string;
-  type: 'DEPOT' | 'RETRAIT';
+  type: 'DEPOT' | 'RETRAIT' | 'GAIN' | 'EPARGNE_DEPOT' | 'EPARGNE_RETRAIT';
   date: string;
   quantite: string;
   montantUnitaire: string;
+  montantNet: string;
+  fraisPourcentage: string;
+  fraisMontant: string;
   compteDebitId: string;
   compteCreditId: string;
+  compteFraisCreditId: string;
   operateur: string;
   description: string;
   notes: string;
@@ -95,8 +99,12 @@ const EMPTY_DEPOT_FORM: DepotFormState = {
   date: new Date().toISOString().slice(0, 10),
   quantite: '1',
   montantUnitaire: '0',
+  montantNet: '0',
+  fraisPourcentage: '3.4',
+  fraisMontant: '0',
   compteDebitId: '',
   compteCreditId: '',
+  compteFraisCreditId: '',
   operateur: 'Flooz',
   description: '',
   notes: '',
@@ -119,6 +127,7 @@ const SECTION_META: Record<SectionId, { label: string; icon: any }> = {
   depenses: { label: 'Gestion Dépenses', icon: Receipt },
   dettes: { label: 'Gestion Dettes', icon: CreditCard },
   depots: { label: 'Gestion dépôt/retrait', icon: ArrowLeftRight },
+  'gains-epargne': { label: 'Gains & Épargne', icon: Wallet },
   comptes: { label: 'Gestion de compte', icon: Landmark },
 };
 
@@ -135,6 +144,8 @@ const DEFAULT_ACCOUNTS = [
   { nom: 'Tmoney', type: 'Mobile Money', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
   { nom: 'Dollar Cash', type: 'Autre', devise: 'USD', tauxFCFA: DEFAULT_USD_RATE, soldeInitialUnites: 0 },
   { nom: 'Dollar DG', type: 'Autre', devise: 'USD', tauxFCFA: DEFAULT_USD_RATE, soldeInitialUnites: 0 },
+  { nom: 'Epargne', type: 'Autre', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
+  { nom: 'Frais épargne', type: 'Autre', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
   { nom: 'Dette', type: 'Autre', devise: 'FCFA', tauxFCFA: 1, soldeInitialUnites: 0 },
 ];
 
@@ -319,6 +330,7 @@ export default function ComptabilitePage() {
 
   const selectedDayTransactions = summary.transactions.filter((tx) => toISODate(tx.date) === selectedDate);
   const selectedDayDepots = summary.depots.filter((item) => toISODate(item.date) === selectedDate);
+  const selectedUpToDateSavings = summary.depots.filter((item) => isOnOrBeforeDate(item.date, selectedDate));
 
   const transactionSearch = search.trim().toLowerCase();
   const filteredTransactions = selectedDayTransactions.filter((tx) => {
@@ -331,8 +343,16 @@ export default function ComptabilitePage() {
   });
 
   const filteredDepots = selectedDayDepots.filter((item) => {
+    if (item.type !== 'DEPOT' && item.type !== 'RETRAIT') return false;
     if (!transactionSearch) return true;
     return [item.operateur, item.description, item.date, item.notes]
+      .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
+  });
+
+  const isSavingsType = (type: AccountingDepot['type']) => type === 'GAIN' || type === 'EPARGNE_DEPOT' || type === 'EPARGNE_RETRAIT';
+  const filteredSavingsOps = selectedUpToDateSavings.filter((item) => isSavingsType(item.type)).filter((item) => {
+    if (!transactionSearch) return true;
+    return [item.operateur, item.description, item.date, item.notes, item.type]
       .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
   });
 
@@ -524,9 +544,16 @@ export default function ComptabilitePage() {
     }
   };
 
-  const openNewDepotModal = () => {
+  const openNewDepotModal = (type: DepotFormState['type'] = 'DEPOT') => {
     clearFlash();
-    setDepotForm({ ...EMPTY_DEPOT_FORM, date: selectedDate });
+    setDepotForm({
+      ...EMPTY_DEPOT_FORM,
+      date: selectedDate,
+      type,
+      compteCreditId: type === 'EPARGNE_DEPOT' ? (comptes.find((account) => String(account.nom || '').trim().toLowerCase() === 'epargne')?._id || '') : '',
+      compteFraisCreditId: type === 'EPARGNE_DEPOT' ? (comptes.find((account) => String(account.nom || '').trim().toLowerCase() === 'frais épargne')?._id || '') : '',
+      compteDebitId: type === 'EPARGNE_RETRAIT' ? (comptes.find((account) => String(account.nom || '').trim().toLowerCase() === 'epargne')?._id || '') : '',
+    });
     setShowDepotModal(true);
   };
 
@@ -538,8 +565,12 @@ export default function ComptabilitePage() {
       date: normalizeDate(depot.date),
       quantite: String(depot.quantite || 1),
       montantUnitaire: String(depot.montantUnitaire || depot.montant || 0),
+      montantNet: String(depot.montantNet || depot.montant || 0),
+      fraisPourcentage: String(depot.fraisPourcentage || (depot.type === 'EPARGNE_DEPOT' ? 3.4 : '')),
+      fraisMontant: String(depot.fraisMontant || 0),
       compteDebitId: getAccountId(depot.compteDebitId || depot.compteId),
       compteCreditId: getAccountId(depot.compteCreditId),
+      compteFraisCreditId: getAccountId(depot.compteFraisCreditId),
       operateur: depot.operateur || '',
       description: depot.description || '',
       notes: depot.notes || '',
@@ -557,8 +588,12 @@ export default function ComptabilitePage() {
         date: depotForm.date,
         quantite: Number(depotForm.quantite || 1),
         montantUnitaire: Number(depotForm.montantUnitaire || 0),
+        montantNet: Number(depotForm.montantNet || 0),
+        fraisPourcentage: Number(depotForm.fraisPourcentage || 0),
+        fraisMontant: Number(depotForm.fraisMontant || 0),
         compteDebitId: depotForm.compteDebitId || undefined,
         compteCreditId: depotForm.compteCreditId || undefined,
+        compteFraisCreditId: depotForm.compteFraisCreditId || undefined,
         operateur: depotForm.operateur,
         description: depotForm.description,
         notes: depotForm.notes,
@@ -866,11 +901,12 @@ export default function ComptabilitePage() {
   };
 
   const exportDepotsPdf = () => {
-    const doc = createPdfReport('Rapport Depots / Retraits', `${selectedDate} • ${selectedDayDepots.length} operation(s)`);
+    const regularDepots = selectedDayDepots.filter((item) => item.type === 'DEPOT' || item.type === 'RETRAIT');
+    const doc = createPdfReport('Rapport Depots / Retraits', `${selectedDate} • ${regularDepots.length} operation(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     const depRawHead = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
-    const depRawBody = selectedDayDepots.map((item) => {
+    const depRawBody = regularDepots.map((item) => {
       const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
       const credit = accountById(getAccountId(item.compteCreditId));
       return [
@@ -936,9 +972,156 @@ export default function ComptabilitePage() {
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
     doc.text(`Date: ${selectedDate}`, 24, finalY + 22);
-    doc.text(`Total: ${formatPdfCurrency(selectedDayDepots.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 40);
+    doc.text(`Total: ${formatPdfCurrency(regularDepots.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 40);
     appendPageNumbers(doc);
     doc.save(`depots_${selectedDate}.pdf`);
+  };
+
+  const exportGainsPdf = () => {
+    const gains = selectedUpToDateSavings.filter((item) => item.type === 'GAIN');
+    const doc = createPdfReport('Rapport Gains cumules', `${selectedDate} • ${gains.length} ligne(s)`);
+    const tableWidth = doc.internal.pageSize.getWidth() - 48;
+    const head = ['Date', 'Description', 'Débit', 'Crédit', 'Montant FCFA', 'Note'];
+    const body = gains.map((item) => {
+      const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+      const credit = accountById(getAccountId(item.compteCreditId));
+      return [
+        sanitizePdfText(normalizeDate(item.date)),
+        sanitizePdfText(item.description || 'Gain'),
+        sanitizePdfText(debit?.nom || '-'),
+        sanitizePdfText(credit?.nom || '-'),
+        formatPdfNumber(item.montant || 0),
+        sanitizePdfText(item.notes || '-'),
+      ];
+    });
+    const { head: gainHead, body: gainBody } = filterEmptyColumns(head, body);
+    const numericHeaders = new Set(['Montant FCFA']);
+
+    autoTable(doc, {
+      startY: 92,
+      margin: { left: 24, right: 24, bottom: 34 },
+      tableWidth,
+      head: [gainHead],
+      body: gainBody,
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'left',
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+      },
+      headStyles: {
+        fillColor: [30, 64, 175],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'left',
+        valign: 'middle',
+        lineWidth: 0.6,
+        lineColor: [30, 64, 175],
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section === 'head') {
+          const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+          if (numericHeaders.has(headerText) || isNumericHeader(headerText)) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+        if (data.section === 'body') {
+          const h = gainHead[data.column.index];
+          if (h && (numericHeaders.has(h) || isNumericHeader(h))) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+      },
+      tableLineWidth: 0.35,
+      tableLineColor: [203, 213, 225],
+      theme: 'grid',
+    });
+    const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Total gains: ${formatPdfCurrency(gains.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 22);
+    appendPageNumbers(doc);
+    doc.save(`gains_cumules_${selectedDate}.pdf`);
+  };
+
+  const exportEpargnePdf = () => {
+    const savings = selectedUpToDateSavings.filter((item) => item.type === 'EPARGNE_DEPOT' || item.type === 'EPARGNE_RETRAIT');
+    const doc = createPdfReport('Rapport Épargne cumulee', `${selectedDate} • ${savings.length} ligne(s)`);
+    const tableWidth = doc.internal.pageSize.getWidth() - 48;
+    const head = ['Date', 'Type', 'Débit', 'Épargne', 'Frais', 'Montant net', 'Description'];
+    const body = savings.map((item) => {
+      const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+      const credit = accountById(getAccountId(item.compteCreditId));
+      return [
+        sanitizePdfText(normalizeDate(item.date)),
+        sanitizePdfText(item.type),
+        sanitizePdfText(debit?.nom || '-'),
+        sanitizePdfText(credit?.nom || '-'),
+        formatPdfNumber(item.fraisMontant || 0),
+        formatPdfNumber(item.type === 'EPARGNE_DEPOT' ? Number(item.montantNet || 0) : Number(item.montant || 0)),
+        sanitizePdfText(item.description || '-'),
+      ];
+    });
+    const { head: savingsHead, body: savingsBody } = filterEmptyColumns(head, body);
+    const numericHeaders = new Set(['Frais', 'Montant net']);
+
+    autoTable(doc, {
+      startY: 92,
+      margin: { left: 24, right: 24, bottom: 34 },
+      tableWidth,
+      head: [savingsHead],
+      body: savingsBody,
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'left',
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+      },
+      headStyles: {
+        fillColor: [30, 64, 175],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'left',
+        valign: 'middle',
+        lineWidth: 0.6,
+        lineColor: [30, 64, 175],
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section === 'head') {
+          const headerText = Array.isArray(data.cell.text) ? data.cell.text.join(' ') : String(data.cell.text || '');
+          if (numericHeaders.has(headerText) || isNumericHeader(headerText)) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+        if (data.section === 'body') {
+          const h = savingsHead[data.column.index];
+          if (h && (numericHeaders.has(h) || isNumericHeader(h))) {
+            data.cell.styles.halign = 'center';
+          }
+        }
+      },
+      tableLineWidth: 0.35,
+      tableLineColor: [203, 213, 225],
+      theme: 'grid',
+    });
+    const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 120;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Épargne cumulée: ${formatPdfCurrency(summary.totals.totalEpargne)}`, 24, finalY + 22);
+    appendPageNumbers(doc);
+    doc.save(`epargne_cumulee_${selectedDate}.pdf`);
   };
 
   const exportComptesPdf = () => {
@@ -1033,7 +1216,14 @@ export default function ComptabilitePage() {
           {activeSection === 'ventes' && <button onClick={() => openNewTransactionModal('VENTE')} className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-900 shadow-md">+ Nouvelle Vente</button>}
           {activeSection === 'depenses' && <button onClick={() => openNewTransactionModal('DEPENSE')} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvelle Dépense</button>}
           {activeSection === 'dettes' && <button onClick={() => openNewTransactionModal('DETTE')} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouvelle Dette</button>}
-          {activeSection === 'depots' && <button onClick={openNewDepotModal} className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-black text-slate-900 shadow-md">+ Nouveau dépôt/retrait</button>}
+          {activeSection === 'depots' && <button onClick={() => openNewDepotModal()} className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-black text-slate-900 shadow-md">+ Nouveau dépôt/retrait</button>}
+          {activeSection === 'gains-epargne' && (
+            <>
+              <button onClick={() => openNewDepotModal('GAIN')} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouveau gain</button>
+              <button onClick={() => openNewDepotModal('EPARGNE_DEPOT')} className="rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Épargne dépôt</button>
+              <button onClick={() => openNewDepotModal('EPARGNE_RETRAIT')} className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Épargne retrait</button>
+            </>
+          )}
           {activeSection === 'comptes' && <button onClick={openNewCompteModal} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md">+ Nouveau libellé</button>}
         </div>
       </header>
@@ -1092,12 +1282,13 @@ export default function ComptabilitePage() {
 
       {activeSection === 'dashboard' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             {[
               { label: "Chiffre d'affaires", value: summary.totals.ventes, icon: TrendingUp, color: 'bg-emerald-500', info: 'Basé sur les ventes enregistrées' },
               { label: 'Total Achats', value: summary.totals.achats, icon: ShoppingCart, color: 'bg-blue-500', info: 'Coûts cumulés' },
               { label: 'Bénéfice estimé', value: summary.totals.benefice, icon: Wallet, color: 'bg-indigo-500', info: `(${formatNumber(summary.totals.avgUnitVente)} - ${formatNumber(summary.totals.avgUnitAchat)}) × ${summary.totals.totalQtyVentes}` },
               { label: 'Total Dépenses', value: summary.totals.depenses, icon: Receipt, color: 'bg-rose-500', info: 'Dépenses cumulées' },
+              { label: 'Épargne cumulée', value: summary.totals.totalEpargne, icon: Wallet, color: 'bg-sky-500', info: 'Solde cumulé de l’épargne' },
             ].map((card) => {
               const Icon = card.icon;
               return (
@@ -1440,6 +1631,100 @@ export default function ComptabilitePage() {
         </div>
       )}
 
+      {activeSection === 'gains-epargne' && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-lg font-semibold text-slate-800">Gains & Épargne</div>
+              <span className="text-xs text-slate-400">{filteredSavingsOps.length} opération(s) cumulée(s)</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <Search size={14} className="text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full sm:w-52 bg-transparent text-sm outline-none" />
+              </div>
+              <button onClick={deleteSelectedDepots} disabled={selectedDepotIds.length === 0 || saving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 inline-flex items-center gap-2">{saving && selectedDepotIds.length > 0 ? <><span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />Suppression...</> : 'Supprimer sélection'}</button>
+              <button onClick={exportGainsPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Export gains</button>
+              <button onClick={exportEpargnePdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FileDown size={16} /> Export épargne</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Gains cumulés</div>
+              <div className="mt-2 text-2xl font-black text-emerald-900">{formatCurrencyFCFA(summary.totals.gains || 0)}</div>
+            </div>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-sky-700">Épargne cumulée</div>
+              <div className="mt-2 text-2xl font-black text-sky-900">{formatCurrencyFCFA(summary.totals.totalEpargne || 0)}</div>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-amber-700">Frais épargne</div>
+              <div className="mt-2 text-2xl font-black text-amber-900">{formatCurrencyFCFA(summary.totals.fraisEpargne || 0)}</div>
+            </div>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3"><CheckSquare size={14} /></th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Débit</th>
+                  <th className="px-4 py-3">Crédit</th>
+                  <th className="px-4 py-3">Frais</th>
+                  <th className="px-4 py-3">Montant net</th>
+                  <th className="px-4 py-3">Description</th>
+                  <th className="px-4 py-3 text-right">Total (FCFA)</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                      <LoadingSpinner label="Chargement..." size="sm" />
+                    </td>
+                  </tr>
+                ) : filteredSavingsOps.length === 0 ? (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-400">Aucune opération trouvée.</td></tr>
+                ) : filteredSavingsOps.map((item, index) => {
+                  const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
+                  const credit = accountById(getAccountId(item.compteCreditId));
+                  const feeCredit = accountById(getAccountId(item.compteFraisCreditId));
+                  const selected = selectedDepotIds.includes(item._id);
+                  return (
+                    <tr key={item._id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={(e) => setSelectedDepotIds((prev) => e.target.checked ? [...prev, item._id] : prev.filter((value) => value !== item._id))} /></td>
+                      <td className="px-4 py-3 whitespace-nowrap">{normalizeDate(item.date)}</td>
+                      <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${item.type === 'GAIN' ? 'bg-emerald-100 text-emerald-700' : item.type === 'EPARGNE_DEPOT' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>{item.type}</span></td>
+                      <td className="px-4 py-3">{debit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{credit?.nom || feeCredit?.nom || '—'}</td>
+                      <td className="px-4 py-3">{item.type === 'EPARGNE_DEPOT' ? formatCurrencyFCFA(item.fraisMontant || 0) : '—'}</td>
+                      <td className="px-4 py-3">{item.type === 'EPARGNE_DEPOT' ? formatCurrencyFCFA(Number(item.montantNet || 0)) : '—'}</td>
+                      <td className="px-4 py-3">{item.description || '—'}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.montant || 0)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => openEditDepotModal(item)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"><Edit3 size={15} /></button>
+                          <button onClick={() => deleteDepot(item._id)} className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-blue-50/70">
+                  <td colSpan={8} className="px-4 py-3 text-right font-semibold">Total</td>
+                  <td className="px-4 py-3 text-right font-black">{formatCurrencyFCFA(filteredSavingsOps.reduce((sum, item) => sum + Number(item.montant || 0), 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       {activeSection === 'comptes' && (
         <div className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1591,28 +1876,72 @@ export default function ComptabilitePage() {
             </div>
             <form onSubmit={saveDepot} className="space-y-4 overflow-y-auto p-6">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Type</label><select value={depotForm.type} onChange={(e) => setDepotForm((prev) => ({ ...prev, type: e.target.value as 'DEPOT' | 'RETRAIT' }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="DEPOT">DEPOT</option><option value="RETRAIT">RETRAIT</option></select></div>
+                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Type</label><select value={depotForm.type} onChange={(e) => setDepotForm((prev) => ({ ...prev, type: e.target.value as DepotFormState['type'] }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="DEPOT">DEPOT</option><option value="RETRAIT">RETRAIT</option><option value="GAIN">GAIN</option><option value="EPARGNE_DEPOT">EPARGNE_DEPOT</option><option value="EPARGNE_RETRAIT">EPARGNE_RETRAIT</option></select></div>
                 <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Date</label><input type="date" value={depotForm.date} onChange={(e) => setDepotForm((prev) => ({ ...prev, date: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Quantité</label><input type="number" min="1" value={depotForm.quantite} onChange={(e) => setDepotForm((prev) => ({ ...prev, quantite: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant unitaire (FCFA)</label><input type="number" min="0" value={depotForm.montantUnitaire} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label>
-                  <select value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <option value="flooz">Flooz</option>
-                    <option value="tmoney">Tmoney</option>
-                    <option value="mtn">MTN</option>
-                  </select>
+              {(depotForm.type === 'DEPOT' || depotForm.type === 'RETRAIT') && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Quantité</label><input type="number" min="1" value={depotForm.quantite} onChange={(e) => setDepotForm((prev) => ({ ...prev, quantite: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant unitaire (FCFA)</label><input type="number" min="0" value={depotForm.montantUnitaire} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
                 </div>
-                <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-              </div>
+              )}
+              {(depotForm.type === 'GAIN' || depotForm.type === 'EPARGNE_DEPOT' || depotForm.type === 'EPARGNE_RETRAIT') && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant brut (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.montantUnitaire} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant net (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.montantNet} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantNet: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                </div>
+              )}
+              {depotForm.type === 'GAIN' && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                  <div className="flex items-end rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Aucun débit sur un gain direct.</div>
+                </div>
+              )}
+              {depotForm.type === 'EPARGNE_DEPOT' && (
+                <div className="space-y-4 rounded-2xl border border-sky-100 bg-sky-50/60 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte épargne crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir épargne --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Frais %</label><input type="number" min="0" step="0.01" value={depotForm.fraisPourcentage} onChange={(e) => setDepotForm((prev) => ({ ...prev, fraisPourcentage: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Frais (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.fraisMontant} onChange={(e) => setDepotForm((prev) => ({ ...prev, fraisMontant: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit frais</label><select value={depotForm.compteFraisCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteFraisCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir frais --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                  </div>
+                </div>
+              )}
+              {depotForm.type === 'EPARGNE_RETRAIT' && (
+                <div className="space-y-4 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit épargne</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir épargne --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit destination</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                  </div>
+                </div>
+              )}
+              {(depotForm.type === 'DEPOT' || depotForm.type === 'RETRAIT') && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                </div>
+              )}
+              {(depotForm.type === 'GAIN' || depotForm.type === 'EPARGNE_DEPOT' || depotForm.type === 'EPARGNE_RETRAIT') && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label><input type="text" value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                </div>
+              )}
+              {(depotForm.type === 'DEPOT' || depotForm.type === 'RETRAIT') && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label>
+                    <select value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <option value="flooz">Flooz</option>
+                      <option value="tmoney">Tmoney</option>
+                      <option value="mtn">MTN</option>
+                    </select>
+                  </div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                </div>
+              )}
               <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={depotForm.notes} onChange={(e) => setDepotForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button type="button" onClick={() => setShowDepotModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-600">Annuler</button>

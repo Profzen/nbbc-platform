@@ -166,11 +166,48 @@ function buildOverviewRows(bundle: ReportBundle) {
       ['Dettes du jour', formatPdfCurrency(day.dettes)],
       ['Depots du jour', formatPdfCurrency(day.depots)],
       ['Retraits du jour', formatPdfCurrency(day.retraits)],
+      ['Gains du jour', formatPdfCurrency(day.gains)],
+      ['Épargne cumulée', formatPdfCurrency(upto.totalEpargne)],
       ['Total comptes', formatPdfCurrency(upto.totalComptes)],
       ['Benefice estime', formatPdfCurrency(upto.benefice)],
       ['Total disponible', formatPdfCurrency(upto.totalDisponible)],
     ],
   };
+}
+
+function buildGainRows(bundle: ReportBundle) {
+  const gains = bundle.summaryUpToDay.depots.filter((item) => item.type === 'GAIN');
+  const accountNameById = new Map(bundle.summaryUpToDay.comptes.map((c) => [String(c._id), c.nom]));
+  const head = ['Date', 'Description', 'Débit', 'Crédit', 'Montant FCFA', 'Note'];
+
+  const body = gains.map((item) => [
+    sanitizePdfText(String(item.date).slice(0, 10)),
+    sanitizePdfText(item.description || 'Gain'),
+    sanitizePdfText(accountNameById.get(getAccountId(item.compteDebitId || item.compteId)) || '-'),
+    sanitizePdfText(accountNameById.get(getAccountId(item.compteCreditId)) || '-'),
+    formatPdfCurrency(Number(item.montant || 0)),
+    sanitizePdfText(item.notes || '-'),
+  ]);
+
+  return filterEmptyColumns(head, body);
+}
+
+function buildEpargneRows(bundle: ReportBundle) {
+  const epargne = bundle.summaryUpToDay.depots.filter((item) => item.type === 'EPARGNE_DEPOT' || item.type === 'EPARGNE_RETRAIT');
+  const accountNameById = new Map(bundle.summaryUpToDay.comptes.map((c) => [String(c._id), c.nom]));
+  const head = ['Date', 'Type', 'Débit', 'Épargne', 'Frais', 'Montant net', 'Description'];
+
+  const body = epargne.map((item) => [
+    sanitizePdfText(String(item.date).slice(0, 10)),
+    sanitizePdfText(item.type),
+    sanitizePdfText(accountNameById.get(getAccountId(item.compteDebitId || item.compteId)) || '-'),
+    sanitizePdfText(accountNameById.get(getAccountId(item.compteCreditId)) || '-'),
+    formatPdfCurrency(Number(item.fraisMontant || 0)),
+    formatPdfCurrency(Number(item.type === 'EPARGNE_DEPOT' ? item.montantNet || 0 : item.montant || 0)),
+    sanitizePdfText(item.description || '-'),
+  ]);
+
+  return filterEmptyColumns(head, body);
 }
 
 function buildTransactionRows(type: AccountingTransactionType, bundle: ReportBundle) {
@@ -303,6 +340,22 @@ export async function buildDailyComptaPdfBundle(input: {
     applyRichTable(doc, head, body, { startY: 96 });
     appendPageNumbers();
     attachments.push({ filename: `${type.toLowerCase()}s_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Rapport Gains', `${reportDate} • ${bundle.summaryUpToDay.depots.filter((item) => item.type === 'GAIN').length} ligne(s) cumulée(s)`);
+    const { head, body } = buildGainRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `gains_cumules_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+  }
+
+  {
+    const { doc, appendPageNumbers } = createPdfReport('Rapport Épargne', `${reportDate} • ${bundle.summaryUpToDay.depots.filter((item) => item.type === 'EPARGNE_DEPOT' || item.type === 'EPARGNE_RETRAIT').length} ligne(s) cumulée(s)`);
+    const { head, body } = buildEpargneRows(bundle);
+    applyRichTable(doc, head, body, { startY: 96 });
+    appendPageNumbers();
+    attachments.push({ filename: `epargne_cumulee_${reportDate}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
   }
 
   {
