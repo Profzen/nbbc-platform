@@ -1,351 +1,273 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
-export default function NouveauTontinePage() {
+type Role = 'SUPER_ADMIN' | 'AGENT' | 'ANALYSTE' | 'COMPLIANCE' | 'TONTINE_CLIENT';
+type Categorie = 'EPARGNE' | 'CLASSIQUE';
+type Frequence = 'HEBDOMADAIRE' | 'BI_HEBDOMADAIRE' | 'MENSUELLE';
+type Moyen = 'CRYPTO' | 'MOBILE_MONEY' | 'CARTE' | 'BANQUE' | 'MANUEL';
+
+const ALL_MOYENS: Moyen[] = ['MANUEL', 'MOBILE_MONEY', 'BANQUE', 'CARTE', 'CRYPTO'];
+
+export default function NouvelleOffreTontinePage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loadingRole, setLoadingRole] = useState(true);
+  const [role, setRole] = useState<Role | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    periodicite: 'HEBDOMADAIRE',
-    dureeMois: 3,
-    montantVersement: '',
-    compteDestinationType: 'CRYPTO',
-    compteDestinationLibelle: '',
-    compteDestinationReference: '',
+    nom: '',
+    categorie: 'EPARGNE' as Categorie,
+    description: '',
+    montantCotisation: '',
+    frequence: 'HEBDOMADAIRE' as Frequence,
+    nombreMembresCible: '5',
+    dateDebutPrevue: '',
+    moyensPaiementAcceptes: ['MANUEL'] as Moyen[],
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'montantVersement' ? parseFloat(value) || '' : value
-    }));
-  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/tontines');
+        const data = await res.json();
+        if (data.success) {
+          setRole(data.data?.role || null);
+        }
+      } catch {
+        setError('Impossible de vérifier le rôle utilisateur.');
+      }
+      setLoadingRole(false);
+    })();
+  }, []);
 
-  const validateStep1 = () => {
-    const montant = Number(formData.montantVersement);
-    if (!Number.isFinite(montant) || montant <= 0) {
-      setError('Le montant du versement doit être supérieur à 0');
-      return false;
-    }
-    return true;
-  };
+  const canCreate = role === 'SUPER_ADMIN' || role === 'AGENT';
 
-  const validateStep2 = () => {
-    if (!formData.compteDestinationLibelle.trim()) {
-      setError('Le libellé du compte de destination est obligatoire');
-      return false;
-    }
-    return true;
-  };
+  const toggleMoyen = (moyen: Moyen) => {
+    setFormData((prev) => {
+      const has = prev.moyensPaiementAcceptes.includes(moyen);
+      const next = has
+        ? prev.moyensPaiementAcceptes.filter((m) => m !== moyen)
+        : [...prev.moyensPaiementAcceptes, moyen];
 
-  const handleNextStep = () => {
-    setError(null);
-    if (step === 1 && validateStep1()) {
-      setStep(2);
-    } else if (step === 2 && validateStep2()) {
-      handleSubmit();
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const payload = {
-        ...formData,
-        montantVersement: Number(formData.montantVersement),
-        devise: 'XOF',
+      return {
+        ...prev,
+        moyensPaiementAcceptes: next.length > 0 ? next : ['MANUEL'],
       };
+    });
+  };
 
+  const submit = async () => {
+    setError(null);
+    setSuccess(null);
+
+    const montant = Number(formData.montantCotisation);
+    if (!formData.nom.trim()) {
+      setError('Le nom de l\'offre est obligatoire.');
+      return;
+    }
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setError('Le montant de cotisation est invalide.');
+      return;
+    }
+
+    const payload = {
+      nom: formData.nom.trim(),
+      categorie: formData.categorie,
+      description: formData.description.trim() || undefined,
+      montantCotisation: montant,
+      frequence: formData.frequence,
+      nombreMembresCible: formData.categorie === 'CLASSIQUE' ? Number(formData.nombreMembresCible) : 1,
+      dateDebutPrevue: formData.dateDebutPrevue || undefined,
+      moyensPaiementAcceptes: formData.moyensPaiementAcceptes,
+    };
+
+    setSaving(true);
+    try {
       const res = await fetch('/api/tontines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
-
       if (!data.success) {
-        setError(data.error || 'Erreur lors de la création de la tontine');
-        setLoading(false);
-        return;
+        setError(data.error || 'Création impossible.');
+      } else {
+        setSuccess('Offre créée avec succès.');
+        setTimeout(() => {
+          router.push('/tontines');
+        }, 1200);
       }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/tontines');
-      }, 1500);
-    } catch (err: any) {
-      setError(err.message || 'Erreur de connexion');
-      setLoading(false);
+    } catch {
+      setError('Erreur réseau pendant la création.');
     }
+    setSaving(false);
   };
 
-  if (success) {
+  if (loadingRole) return <LoadingSpinner />;
+
+  if (!canCreate) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center p-4 pt-20 md:pt-0">
-        <div className="bg-white rounded-lg shadow-xl p-8 text-center max-w-md w-full">
-          <div className="mb-6 flex justify-center">
-            <div className="bg-green-100 p-3 rounded-full">
-              <CheckCircle className="w-12 h-12 text-green-600" />
-            </div>
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Tontine créée ✓</h2>
-          <p className="text-slate-600 mb-6">Votre contrat d'épargne programmée a été créé avec succès</p>
-          <p className="text-sm text-slate-500">Redirection en cours...</p>
+      <div className="min-h-screen p-4 md:p-8 pt-20 md:pt-8 bg-slate-50">
+        <button
+          onClick={() => router.push('/tontines')}
+          className="inline-flex items-center gap-2 text-slate-700 hover:text-slate-900"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Retour aux tontines
+        </button>
+        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          Seuls les profils Admin/Agent peuvent créer une tontine. Les clients adhèrent uniquement aux offres existantes.
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4 md:p-8 pt-20 md:pt-8">
-      <div className="max-w-2xl mx-auto">
-        {/* Back Button */}
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 pt-20 md:pt-8">
+      <div className="max-w-2xl mx-auto space-y-6">
         <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition-colors"
+          onClick={() => router.push('/tontines')}
+          className="inline-flex items-center gap-2 text-slate-700 hover:text-slate-900"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
           Retour
         </button>
 
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">Nouvelle tontine</h1>
-          <p className="text-slate-600 mt-2">Créez un contrat d'épargne programmée</p>
-        </div>
+        <header>
+          <h1 className="text-3xl font-bold text-slate-900">Nouvelle offre tontine</h1>
+            <p className="text-slate-600 mt-1">Créez une tontine &Eacute;pargne ou Classique rotative.</p>
+        </header>
 
-        {/* Progress Indicator */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex-1">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                step >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              1
-            </div>
-            <p className="text-sm text-slate-600 mt-2 text-center">Paramètres</p>
-          </div>
-          <div className="flex-1 h-1 mx-2 bg-slate-200 relative top-5">
-            <div
-              className={`h-full transition-all ${step >= 2 ? 'w-full bg-blue-600' : 'w-0'}`}
-            />
-          </div>
-          <div className="flex-1">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                step >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              2
-            </div>
-            <p className="text-sm text-slate-600 mt-2 text-center">Destination</p>
-          </div>
-        </div>
-
-        {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-semibold">Erreur</p>
-              <p className="text-sm">{error}</p>
-            </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700 inline-flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-700 inline-flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            {success}
           </div>
         )}
 
-        {/* Form */}
-        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-          {step === 1 ? (
-            <div className="space-y-6">
-              {/* Periodicité */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Périodicité des versements
-                </label>
-                <select
-                  name="periodicite"
-                  value={formData.periodicite}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                >
-                  <option value="JOURNALIERE">Quotidien (chaque jour)</option>
-                  <option value="HEBDOMADAIRE">Hebdomadaire (chaque semaine)</option>
-                </select>
-              </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nom de l'offre</label>
+            <input
+              type="text"
+              value={formData.nom}
+              onChange={(e) => setFormData((prev) => ({ ...prev, nom: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="ex: Tontine Quartier A - Avril"
+            />
+          </div>
 
-              {/* Durée */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Durée du contrat
-                </label>
-                <select
-                  name="dureeMois"
-                  value={formData.dureeMois}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                >
-                  <option value={3}>3 mois</option>
-                  <option value={6}>6 mois</option>
-                </select>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Catégorie</label>
+            <select
+              value={formData.categorie}
+              onChange={(e) => setFormData((prev) => ({ ...prev, categorie: e.target.value as Categorie }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            >
+              <option value="EPARGNE">Épargne (solo)</option>
+              <option value="CLASSIQUE">Classique rotative (groupe)</option>
+            </select>
+          </div>
 
-              {/* Montant */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Montant par versement (XOF)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    name="montantVersement"
-                    placeholder="ex: 10000"
-                    value={formData.montantVersement}
-                    onChange={handleInputChange}
-                    min="1"
-                    step="100"
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                  />
-                  <span className="absolute right-4 top-3 text-slate-500">XOF</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Vous verserez {formData.montantVersement ? formData.montantVersement : '—'} XOF {
-                    formData.periodicite === 'JOURNALIERE' ? 'chaque jour' : 'chaque semaine'
-                  }
-                </p>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 min-h-24"
+              placeholder="Contexte, règles, publics visés..."
+            />
+          </div>
 
-              {/* Info Box */}
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-900">
-                  <strong>Frais plateforme:</strong> 10%
-                  <br />
-                  <strong>Pénalité sortie anticipée:</strong> 10%
-                  <br />
-                  <strong>Pénalité défaut de versement:</strong> 10%
-                </p>
-              </div>
-
-              {/* Next Button */}
-              <button
-                onClick={handleNextStep}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md"
-              >
-                Suivant
-              </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Cotisation (XOF)</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={formData.montantCotisation}
+                onChange={(e) => setFormData((prev) => ({ ...prev, montantCotisation: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Type de compte */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Type de compte de destination
-                </label>
-                <select
-                  name="compteDestinationType"
-                  value={formData.compteDestinationType}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                >
-                  <option value="CRYPTO">Crypto-monnaie (Bitcoin, Ethereum...)</option>
-                  <option value="MOBILE_MONEY">Mobile Money (Airtel, Orange...)</option>
-                  <option value="CARTE">Carte bancaire</option>
-                  <option value="BANQUE">Compte bancaire</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-2">
-                  C'est là que seront versés vos gains à la maturation du contrat
-                </p>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Fréquence</label>
+              <select
+                value={formData.frequence}
+                onChange={(e) => setFormData((prev) => ({ ...prev, frequence: e.target.value as Frequence }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              >
+                <option value="HEBDOMADAIRE">Hebdomadaire</option>
+                <option value="BI_HEBDOMADAIRE">Chaque 2 semaines</option>
+                <option value="MENSUELLE">Mensuelle</option>
+              </select>
+            </div>
+          </div>
 
-              {/* Libellé du compte */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Libellé/Identifiant du compte
-                </label>
-                <input
-                  type="text"
-                  name="compteDestinationLibelle"
-                  placeholder="ex: Mon portefeuille Bitcoin, Mon compte Orange..."
-                  value={formData.compteDestinationLibelle}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                />
-              </div>
-
-              {/* Référence optionnelle */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Référence du compte (optionnel)
-                </label>
-                <input
-                  type="text"
-                  name="compteDestinationReference"
-                  placeholder="ex: Adresse Bitcoin, Numéro de compte..."
-                  value={formData.compteDestinationReference}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                />
-              </div>
-
-              {/* Summary */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <h3 className="font-semibold text-slate-900 mb-3">Résumé du contrat</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-slate-500">Périodicité</p>
-                    <p className="font-semibold text-slate-900">
-                      {formData.periodicite === 'JOURNALIERE' ? 'Quotidien' : 'Hebdomadaire'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Durée</p>
-                    <p className="font-semibold text-slate-900">{formData.dureeMois} mois</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Montant/versement</p>
-                    <p className="font-semibold text-slate-900">{formData.montantVersement} XOF</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Destination</p>
-                    <p className="font-semibold text-slate-900 truncate">{formData.compteDestinationLibelle}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex-1 border border-slate-300 text-slate-900 py-3 rounded-lg font-semibold hover:bg-slate-50 transition-all"
-                >
-                  Retour
-                </button>
-                <button
-                  onClick={handleNextStep}
-                  disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition-all shadow-md disabled:opacity-50"
-                >
-                  {loading ? 'Création en cours...' : 'Créer la tontine'}
-                </button>
-              </div>
+          {formData.categorie === 'CLASSIQUE' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de participants cible</label>
+              <input
+                type="number"
+                min="2"
+                step="1"
+                value={formData.nombreMembresCible}
+                onChange={(e) => setFormData((prev) => ({ ...prev, nombreMembresCible: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </div>
           )}
-        </div>
 
-        {/* Footer Info */}
-        <p className="text-xs text-slate-500 text-center mt-6">
-          Vos données de compte de destination sont sécurisées et chiffrées
-        </p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Date de début prévue (optionnel)</label>
+            <input
+              type="date"
+              value={formData.dateDebutPrevue}
+              onChange={(e) => setFormData((prev) => ({ ...prev, dateDebutPrevue: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-2">Moyens de paiement acceptés</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {ALL_MOYENS.map((moyen) => {
+                const active = formData.moyensPaiementAcceptes.includes(moyen);
+                return (
+                  <button
+                    key={moyen}
+                    type="button"
+                    onClick={() => toggleMoyen(moyen)}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold ${active ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    {moyen}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving ? 'Création en cours...' : "Créer l&apos;offre"}
+          </button>
+        </div>
       </div>
     </div>
   );

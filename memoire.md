@@ -381,7 +381,9 @@ Regles de travail permanentes:
 - ne pas casser la parite web/mobile;
 - ne pas faire de refactor massif hors demande;
 - valider au minimum TypeScript avant de considerer la tache terminee;
-- si l’app mobile peut etre impactee, penser sync Capacitor ou rebuild native.
+- si l’app mobile peut etre impactee, penser sync Capacitor ou rebuild native;
+- pour toute modification web partagee, exiger `npm run build` puis `npm run cap:sync` avant livraison afin que les builds Android/iOS et les artefacts GitHub Actions restent alignes;
+- si la modification doit etre embarquee dans l’application native, verifier ensuite la reconstruction Android/iOS ou les artefacts CI correspondants.
 
 ## 22) Checklist de verification rapide
 
@@ -417,5 +419,8 @@ Si le contexte est perdu:
 ## 25) Resume executif
 
 NBBC Platform est une seule application logique rendue sur plusieurs cibles. Le web et la partie mobile hybride partagent les memes modeles, les memes routes et la plupart des composants. La release mobile doit etre consideree a chaque changement qui touche le rendu, les assets ou la logique metier. Pour les builds Android, GitHub Actions est le point de recuperation des artefacts de release, et pour iOS il faut passer par un environnement Mac/Xcode. Le fichier memoire doit rester la source de verite pour reprendre le projet rapidement.
+
+Regle operationnelle a garder absolue:
+- toute modification web partagee doit etre validee pour le web puis synchronisee vers Capacitor avant de considerer le travail termine.
 
 Fin du document.
