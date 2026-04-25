@@ -168,7 +168,7 @@ function buildOverviewRows(bundle: ReportBundle) {
       ['Retraits du jour', formatPdfCurrency(day.retraits)],
       ['Gains du jour', formatPdfCurrency(day.gains)],
       ['Épargne cumulée', formatPdfCurrency(upto.totalEpargne)],
-      ['Total comptes', formatPdfCurrency(upto.totalComptes)],
+      ['Total comptes (hors Dette)', formatPdfCurrency(upto.totalComptes)],
       ['Benefice estime', formatPdfCurrency(upto.benefice)],
       ['Total disponible', formatPdfCurrency(upto.totalDisponible)],
     ],
@@ -245,7 +245,7 @@ function buildTransactionRows(type: AccountingTransactionType, bundle: ReportBun
 
 function buildDepotRows(bundle: ReportBundle) {
   const accountNameById = new Map(bundle.summaryUpToDay.comptes.map((c) => [String(c._id), c.nom]));
-  const head = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
+  const head = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Total FCFA'];
 
   const body = bundle.depotsDay.map((item) => {
     const debitName = accountNameById.get(getAccountId(item.compteDebitId || item.compteId)) || '-';
@@ -257,7 +257,6 @@ function buildDepotRows(bundle: ReportBundle) {
       formatPdfNumber(Number(item.montantUnitaire || 0)),
       sanitizePdfText(debitName),
       sanitizePdfText(creditName),
-      sanitizePdfText(item.operateur),
       formatPdfCurrency(Number(item.montant || 0)),
     ];
   });

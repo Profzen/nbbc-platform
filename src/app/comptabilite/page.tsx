@@ -920,7 +920,7 @@ export default function ComptabilitePage() {
     const doc = createPdfReport('Rapport Depots / Retraits', `${selectedDate} • ${regularDepots.length} operation(s)`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
-    const depRawHead = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Opérateur', 'Total FCFA'];
+    const depRawHead = ['Date', 'Type', 'Qté', 'Montant unitaire (FCFA)', 'Débit', 'Crédit', 'Total FCFA'];
     const depRawBody = regularDepots.map((item) => {
       const debit = accountById(getAccountId(item.compteDebitId || item.compteId));
       const credit = accountById(getAccountId(item.compteCreditId));
@@ -931,7 +931,6 @@ export default function ComptabilitePage() {
         formatPdfNumber(item.montantUnitaire || 0),
         sanitizePdfText(debit?.nom || ''),
         sanitizePdfText(credit?.nom || ''),
-        sanitizePdfText(item.operateur),
         formatPdfNumber(item.montant || 0),
       ];
     });
