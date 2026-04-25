@@ -264,6 +264,21 @@ export default function ComptabilitePage() {
     }
   }, [txForm.quantite, txForm.prixUnitaire, txForm.montant]);
   const [depotForm, setDepotForm] = useState<DepotFormState>(EMPTY_DEPOT_FORM);
+
+  // Auto-calcul frais et montant net pour EPARGNE_DEPOT
+  useEffect(() => {
+    if (depotForm.type === 'EPARGNE_DEPOT') {
+      const brut = Number(depotForm.montantUnitaire || 0);
+      const pct = Number(depotForm.fraisPourcentage || 3.4);
+      const frais = Math.round(brut * pct) / 100;
+      const net = Math.round((brut - frais) * 100) / 100;
+      setDepotForm((prev) => ({ ...prev, fraisMontant: String(frais), montantNet: String(net) }));
+    } else if (depotForm.type === 'GAIN' || depotForm.type === 'EPARGNE_RETRAIT') {
+      setDepotForm((prev) => ({ ...prev, montantNet: prev.montantUnitaire }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depotForm.type, depotForm.montantUnitaire, depotForm.fraisPourcentage]);
+
   const [compteForm, setCompteForm] = useState<CompteFormState>(EMPTY_COMPTE_FORM);
 
   const fetchAll = useCallback(async () => {
@@ -1782,11 +1797,11 @@ export default function ComptabilitePage() {
                   </tr>
                   <tr>
                     <td colSpan={6} className="px-4 py-3 text-xs text-slate-500">
-                      <strong>Formule :</strong> TotalComptes + Bénéfice - Dépenses - Dettes
+                      <strong>Formule :</strong> Total comptes (hors Dette) − Dettes cumulées + Bénéfice du jour − Dépenses du jour
                       <br />
-                      Bénéfice = ({formatNumber(summary.totals.avgUnitVente)} - {formatNumber(summary.totals.avgUnitAchat)}) × {summary.totals.totalQtyVentes} = {formatCurrencyFCFA(summary.totals.benefice)}
-                      {' | '}Dépenses: {formatCurrencyFCFA(summary.totals.depenses)}
-                      {' | '}Dettes: {formatCurrencyFCFA(summary.totals.dettes)}
+                      Bénéfice du jour: {formatCurrencyFCFA(summary.totals.dayBenefice)}
+                      {' | '}Dépenses du jour: {formatCurrencyFCFA(summary.totals.dayDepenses)}
+                      {' | '}Dettes cumulées: {formatCurrencyFCFA(summary.totals.dettes)}
                     </td>
                   </tr>
                 </tfoot>
@@ -1888,7 +1903,13 @@ export default function ComptabilitePage() {
               {(depotForm.type === 'GAIN' || depotForm.type === 'EPARGNE_DEPOT' || depotForm.type === 'EPARGNE_RETRAIT') && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant brut (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.montantUnitaire} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantUnitaire: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant net (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.montantNet} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantNet: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Montant net (FCFA){depotForm.type === 'EPARGNE_DEPOT' ? ' — calculé' : ''}</label>
+                    {depotForm.type === 'EPARGNE_DEPOT' ? (
+                      <input type="number" readOnly value={depotForm.montantNet} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 cursor-not-allowed" />
+                    ) : (
+                      <input type="number" min="0" step="0.01" value={depotForm.montantNet} onChange={(e) => setDepotForm((prev) => ({ ...prev, montantNet: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" />
+                    )}
+                  </div>
                 </div>
               )}
               {depotForm.type === 'GAIN' && (
@@ -1903,10 +1924,9 @@ export default function ComptabilitePage() {
                     <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte débit</label><select value={depotForm.compteDebitId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteDebitId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir débit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
                     <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte épargne crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir épargne --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Frais %</label><input type="number" min="0" step="0.01" value={depotForm.fraisPourcentage} onChange={(e) => setDepotForm((prev) => ({ ...prev, fraisPourcentage: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Frais (FCFA)</label><input type="number" min="0" step="0.01" value={depotForm.fraisMontant} onChange={(e) => setDepotForm((prev) => ({ ...prev, fraisMontant: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit frais</label><select value={depotForm.compteFraisCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteFraisCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir frais --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
+                    <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Frais (FCFA) — calculé</label><input type="number" readOnly value={depotForm.fraisMontant} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 cursor-not-allowed" /></div>
                   </div>
                 </div>
               )}
@@ -1924,25 +1944,7 @@ export default function ComptabilitePage() {
                   <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Compte crédit</label><select value={depotForm.compteCreditId} onChange={(e) => setDepotForm((prev) => ({ ...prev, compteCreditId: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="">-- Choisir crédit --</option>{displayAccounts.map((account) => <option key={account._id} value={account._id}>{account.nom} ({account.devise})</option>)}</select></div>
                 </div>
               )}
-              {(depotForm.type === 'GAIN' || depotForm.type === 'EPARGNE_DEPOT' || depotForm.type === 'EPARGNE_RETRAIT') && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label><input type="text" value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                </div>
-              )}
-              {(depotForm.type === 'DEPOT' || depotForm.type === 'RETRAIT') && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Opérateur</label>
-                    <select value={depotForm.operateur} onChange={(e) => setDepotForm((prev) => ({ ...prev, operateur: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <option value="flooz">Flooz</option>
-                      <option value="tmoney">Tmoney</option>
-                      <option value="mtn">MTN</option>
-                    </select>
-                  </div>
-                  <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
-                </div>
-              )}
-              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Note</label><textarea rows={3} value={depotForm.notes} onChange={(e) => setDepotForm((prev) => ({ ...prev, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
+              <div><label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">Description</label><input type="text" value={depotForm.description} onChange={(e) => setDepotForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></div>
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button type="button" onClick={() => setShowDepotModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-600">Annuler</button>
                 <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white disabled:opacity-60 inline-flex items-center gap-2">{saving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Enregistrement...</> : 'Enregistrer'}</button>

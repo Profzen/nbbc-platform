@@ -298,8 +298,27 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const avgUnitVente = totalQtyVentes > 0 ? totalVentes / totalQtyVentes : 0;
   const benefice = Math.round(((avgUnitVente - avgUnitAchat) * totalQtyVentes) * 100) / 100;
 
-  const totalComptes = comptes.reduce((sum, compte) => sum + Number(compte.soldeCalculeFCFA || 0), 0);
-  const totalDisponible = round2(totalComptes + benefice - totalDepenses - totalDettes);
+  const refDateStr = referenceDate
+    ? (typeof referenceDate === 'string' ? referenceDate : new Date(referenceDate).toISOString()).slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  const dayDepenseTxs = depenses.filter((tx) => String(tx.date || '').slice(0, 10) === refDateStr);
+  const dayAchatTxs = achats.filter((tx) => String(tx.date || '').slice(0, 10) === refDateStr);
+  const dayVenteTxs = ventes.filter((tx) => String(tx.date || '').slice(0, 10) === refDateStr);
+
+  const totalDayDepenses = round2(dayDepenseTxs.reduce((sum, tx) => sum + Number(tx.amountFCFA || 0), 0));
+  const dayQtyAchats = dayAchatTxs.reduce((sum, tx) => sum + Number(tx.quantite || 0), 0);
+  const dayQtyVentes = dayVenteTxs.reduce((sum, tx) => sum + Number(tx.quantite || 0), 0);
+  const dayTotalAchats = dayAchatTxs.reduce((sum, tx) => sum + Number(tx.amountFCFA || 0), 0);
+  const dayTotalVentes = dayVenteTxs.reduce((sum, tx) => sum + Number(tx.amountFCFA || 0), 0);
+  const dayAvgUnitAchat = dayQtyAchats > 0 ? dayTotalAchats / dayQtyAchats : 0;
+  const dayAvgUnitVente = dayQtyVentes > 0 ? dayTotalVentes / dayQtyVentes : 0;
+  const dayBenefice = round2((dayAvgUnitVente - dayAvgUnitAchat) * dayQtyVentes);
+
+  const totalComptes = comptes
+    .filter((compte) => String(compte.nom || '').trim().toLowerCase() !== 'dette')
+    .reduce((sum, compte) => sum + Number(compte.soldeCalculeFCFA || 0), 0);
+  const totalDisponible = round2(totalComptes - totalDettes + dayBenefice - totalDayDepenses);
 
   const monthlyMap = new Map<string, { month: string; ACHAT: number; VENTE: number; DEPENSE: number; DETTE: number }>();
   const now = referenceDate ? new Date(referenceDate) : new Date();
@@ -335,6 +354,8 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
       benefice,
       totalComptes,
       totalDisponible,
+      dayBenefice,
+      dayDepenses: totalDayDepenses,
       avgUnitAchat,
       avgUnitVente,
       totalQtyVentes,
