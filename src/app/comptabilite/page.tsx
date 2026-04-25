@@ -370,6 +370,9 @@ export default function ComptabilitePage() {
     return [item.operateur, item.description, item.date, item.notes, item.type]
       .some((value) => String(value || '').toLowerCase().includes(transactionSearch));
   });
+  const dayGains = selectedDayDepots
+    .filter((item) => item.type === 'GAIN')
+    .reduce((sum, item) => sum + Number(item.montant || 0), 0);
 
   const accountById = (id: string) => displayAccounts.find((account) => account._id === id);
 
@@ -992,8 +995,8 @@ export default function ComptabilitePage() {
   };
 
   const exportGainsPdf = () => {
-    const gains = selectedUpToDateSavings.filter((item) => item.type === 'GAIN');
-    const doc = createPdfReport('Rapport Gains cumules', `${selectedDate} • ${gains.length} ligne(s)`);
+    const gains = selectedDayDepots.filter((item) => item.type === 'GAIN');
+    const doc = createPdfReport('Rapport Gains du jour', `${selectedDate} • ${gains.length} gain(s) du jour`);
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
     const head = ['Date', 'Description', 'Débit', 'Crédit', 'Montant FCFA', 'Note'];
     const body = gains.map((item) => {
@@ -1059,9 +1062,9 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total gains: ${formatPdfCurrency(gains.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 22);
+    doc.text(`Total gains du jour: ${formatPdfCurrency(gains.reduce((sum, item) => sum + Number(item.montant || 0), 0))}`, 24, finalY + 22);
     appendPageNumbers(doc);
-    doc.save(`gains_cumules_${selectedDate}.pdf`);
+    doc.save(`gains_${selectedDate}.pdf`);
   };
 
   const exportEpargnePdf = () => {
@@ -1133,7 +1136,8 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Épargne cumulée: ${formatPdfCurrency(summary.totals.totalEpargne)}`, 24, finalY + 22);
+    doc.text(`Épargne cumulée nette: ${formatPdfCurrency(summary.totals.totalEpargne)}`, 24, finalY + 22);
+    doc.text(`Frais cumulés: ${formatPdfCurrency(summary.totals.fraisEpargne)}`, 24, finalY + 40);
     appendPageNumbers(doc);
     doc.save(`epargne_cumulee_${selectedDate}.pdf`);
   };
@@ -1669,8 +1673,8 @@ export default function ComptabilitePage() {
           </div>
           <div className="grid grid-cols-1 gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 md:grid-cols-3">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Gains cumulés</div>
-              <div className="mt-2 text-2xl font-black text-emerald-900">{formatCurrencyFCFA(summary.totals.gains || 0)}</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Gains du jour</div>
+              <div className="mt-2 text-2xl font-black text-emerald-900">{formatCurrencyFCFA(dayGains)}</div>
             </div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-sky-700">Épargne cumulée</div>
@@ -1719,7 +1723,7 @@ export default function ComptabilitePage() {
                       <td className="px-4 py-3">{debit?.nom || '—'}</td>
                       <td className="px-4 py-3">{credit?.nom || feeCredit?.nom || '—'}</td>
                       <td className="px-4 py-3">{item.type === 'EPARGNE_DEPOT' ? formatCurrencyFCFA(item.fraisMontant || 0) : '—'}</td>
-                      <td className="px-4 py-3">{item.type === 'EPARGNE_DEPOT' ? formatCurrencyFCFA(Number(item.montantNet || 0)) : '—'}</td>
+                      <td className="px-4 py-3">{item.type === 'EPARGNE_DEPOT' ? formatCurrencyFCFA(Number(item.montantNet || item.montant || 0)) : '—'}</td>
                       <td className="px-4 py-3">{item.description || '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrencyFCFA(item.montant || 0)}</td>
                       <td className="px-4 py-3 text-right">

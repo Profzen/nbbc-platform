@@ -287,9 +287,9 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const totalDepots = depots.filter((item) => item.type === 'DEPOT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
   const totalRetraits = depots.filter((item) => item.type === 'RETRAIT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
   const totalGains = depots.filter((item) => item.type === 'GAIN').reduce((sum, item) => sum + Number(item.montant || 0), 0);
-  const totalEpargneDepots = depots.filter((item) => item.type === 'EPARGNE_DEPOT').reduce((sum, item) => sum + Number(item.montantNet || 0), 0);
+  const totalEpargneDepots = depots.filter((item) => item.type === 'EPARGNE_DEPOT').reduce((sum, item) => sum + Number(item.montantNet || item.montant || 0), 0);
   const totalEpargneRetraits = depots.filter((item) => item.type === 'EPARGNE_RETRAIT').reduce((sum, item) => sum + Number(item.montant || 0), 0);
-  const totalEpargne = round2(comptes.find((compte) => String(compte.nom || '').trim().toLowerCase() === 'epargne')?.soldeCalculeFCFA || 0);
+  const totalEpargne = round2(totalEpargneDepots - totalEpargneRetraits);
   const totalFraisEpargne = depots.filter((item) => item.type === 'EPARGNE_DEPOT').reduce((sum, item) => sum + Number(item.fraisMontant || 0), 0);
 
   const totalQtyAchats = achats.reduce((sum, tx) => sum + Number(tx.quantite || 0), 0);
