@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">NBBC Platform</string>
     <string name="title_activity_main">NBBC Platform</string>
-    <string name="package_name">com.nbbc.platform</string>
-    <string name="custom_url_scheme">com.nbbc.platform</string>
+    <string name="package_name">com.nbbc.mobile</string>
+    <string name="custom_url_scheme">com.nbbc.mobile</string>
 </resources>

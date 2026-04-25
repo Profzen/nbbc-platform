@@ -1,4 +1,4 @@
-package com.nbbc.platform;
+package com.nbbc.mobile;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const appUrl = process.env.CAPACITOR_APP_URL;
 
 const config: CapacitorConfig = {
-  appId: 'com.nbbc.platform',
+  appId: 'com.nbbc.mobile',
   appName: 'NBBC Platform',
   webDir: 'public-mobile',
   server: appUrl
