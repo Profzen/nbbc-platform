@@ -168,7 +168,7 @@ function buildOverviewRows(bundle: ReportBundle) {
       ['Retraits du jour', formatPdfCurrency(day.retraits)],
       ['Gains du jour', formatPdfCurrency(day.gains)],
       ['Épargne cumulée', formatPdfCurrency(upto.totalEpargne)],
-      ['Total comptes (hors Dette)', formatPdfCurrency(upto.totalComptes)],
+      ['Total comptes (hors Dette & Dépense)', formatPdfCurrency(upto.totalComptes)],
       ['Benefice estime', formatPdfCurrency(upto.benefice)],
       ['Total disponible', formatPdfCurrency(upto.totalDisponible)],
     ],

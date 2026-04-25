@@ -316,7 +316,10 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
   const dayBenefice = round2((dayAvgUnitVente - dayAvgUnitAchat) * dayQtyVentes);
 
   const totalComptes = comptes
-    .filter((compte) => String(compte.nom || '').trim().toLowerCase() !== 'dette')
+    .filter((compte) => {
+      const nom = String(compte.nom || '').trim().toLowerCase();
+      return nom !== 'dette' && nom !== 'dépense' && nom !== 'depense';
+    })
     .reduce((sum, compte) => sum + Number(compte.soldeCalculeFCFA || 0), 0);
   const totalDisponible = round2(totalComptes - totalDettes + dayBenefice - totalDayDepenses);
 
