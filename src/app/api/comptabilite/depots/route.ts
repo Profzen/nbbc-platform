@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import DepotRetrait from '@/models/DepotRetrait';
+import '@/models/Compte';
 import { round2 } from '@/lib/accounting';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
