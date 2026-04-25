@@ -321,7 +321,7 @@ export function computeComptabiliteSummary(comptesRaw: AccountingCompte[], trans
       return nom !== 'dette' && nom !== 'dépense' && nom !== 'depense';
     })
     .reduce((sum, compte) => sum + Number(compte.soldeCalculeFCFA || 0), 0);
-  const totalDisponible = round2(totalComptes - totalDettes + dayBenefice - totalDayDepenses);
+  const totalDisponible = round2(totalComptes - totalDettes + dayBenefice);
 
   const monthlyMap = new Map<string, { month: string; ACHAT: number; VENTE: number; DEPENSE: number; DETTE: number }>();
   const now = referenceDate ? new Date(referenceDate) : new Date();

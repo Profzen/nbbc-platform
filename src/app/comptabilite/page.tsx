@@ -1213,8 +1213,6 @@ export default function ComptabilitePage() {
     y += 16;
     doc.text(`Bénéfice du jour: ${formatPdfCurrency(summary.totals.dayBenefice)}`, 40, y);
     y += 16;
-    doc.text(`Dépenses du jour: ${formatPdfCurrency(summary.totals.dayDepenses)}`, 40, y);
-    y += 16;
     doc.text(`Dettes cumulées: ${formatPdfCurrency(summary.totals.dettes)}`, 40, y);
     y += 16;
     doc.text(`Total disponible: ${formatPdfCurrency(summary.totals.totalDisponible)}`, 40, y);
@@ -1813,10 +1811,9 @@ export default function ComptabilitePage() {
                   </tr>
                   <tr>
                     <td colSpan={6} className="px-4 py-3 text-xs text-slate-500">
-                      <strong>Formule :</strong> Total comptes (hors Dette &amp; Dépense) − Dettes cumulées + Bénéfice du jour − Dépenses du jour
+                      <strong>Formule :</strong> Total comptes (hors Dette &amp; Dépense) − Dettes cumulées + Bénéfice du jour
                       <br />
                       Bénéfice du jour: {formatCurrencyFCFA(summary.totals.dayBenefice)}
-                      {' | '}Dépenses du jour: {formatCurrencyFCFA(summary.totals.dayDepenses)}
                       {' | '}Dettes cumulées: {formatCurrencyFCFA(summary.totals.dettes)}
                     </td>
                   </tr>
