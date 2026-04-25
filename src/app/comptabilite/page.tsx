@@ -1144,12 +1144,17 @@ export default function ComptabilitePage() {
     const tableWidth = doc.internal.pageSize.getWidth() - 48;
 
     const cptRawHead = ['Libellé', 'Taux (1 -> FCFA)', 'Equiv. unités', 'Solde FCFA'];
-    const cptRawBody = displayAccounts.map((account) => [
-      sanitizePdfText(account.nom),
-      formatPdfNumber(account.tauxFCFA || 1),
-      formatPdfNumber(account.equivalentUnits || 0),
-      formatPdfNumber(account.soldeCalculeFCFA || 0),
-    ]);
+    const cptRawBody = displayAccounts.map((account) => {
+      const isDepense = String(account.nom || '').trim().toLowerCase() === 'dépense' || String(account.nom || '').trim().toLowerCase() === 'depense';
+      const solde = isDepense ? summary.totals.dayDepenses : (account.soldeCalculeFCFA || 0);
+      const units = isDepense ? summary.totals.dayDepenses : (account.equivalentUnits || 0);
+      return [
+        sanitizePdfText(account.nom + (isDepense ? ' (du jour)' : '')),
+        formatPdfNumber(account.tauxFCFA || 1),
+        formatPdfNumber(units),
+        formatPdfNumber(solde),
+      ];
+    });
     const { head: cptHead, body: cptBody } = filterEmptyColumns(cptRawHead, cptRawBody);
     const cptNumericHeaders = new Set(['Taux (1 -> FCFA)', 'Equiv. unités', 'Solde FCFA']);
 
@@ -1201,13 +1206,13 @@ export default function ComptabilitePage() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Total comptes: ${formatPdfCurrency(summary.totals.totalComptes)}`, 40, y);
+    doc.text(`Total comptes (hors Dette): ${formatPdfCurrency(summary.totals.totalComptes)}`, 40, y);
     y += 16;
-    doc.text(`Bénéfice: ${formatPdfCurrency(summary.totals.benefice)}`, 40, y);
+    doc.text(`Bénéfice du jour: ${formatPdfCurrency(summary.totals.dayBenefice)}`, 40, y);
     y += 16;
-    doc.text(`Dépenses: ${formatPdfCurrency(summary.totals.depenses)}`, 40, y);
+    doc.text(`Dépenses du jour: ${formatPdfCurrency(summary.totals.dayDepenses)}`, 40, y);
     y += 16;
-    doc.text(`Dettes: ${formatPdfCurrency(summary.totals.dettes)}`, 40, y);
+    doc.text(`Dettes cumulées: ${formatPdfCurrency(summary.totals.dettes)}`, 40, y);
     y += 16;
     doc.text(`Total disponible: ${formatPdfCurrency(summary.totals.totalDisponible)}`, 40, y);
     appendPageNumbers(doc);
