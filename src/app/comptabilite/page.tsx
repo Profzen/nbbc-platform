@@ -1771,13 +1771,20 @@ export default function ComptabilitePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayAccounts.map((account, index) => (
+                  {displayAccounts.map((account, index) => {
+                    const isDepenseAccount = String(account.nom || '').trim().toLowerCase() === 'dépense' || String(account.nom || '').trim().toLowerCase() === 'depense';
+                    const displaySolde = isDepenseAccount ? summary.totals.dayDepenses : (account.soldeCalculeFCFA || 0);
+                    const displayUnits = isDepenseAccount ? summary.totals.dayDepenses : (account.equivalentUnits || 0);
+                    return (
                     <tr key={account._id} className={`border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                      <td className="px-4 py-4 text-[16px] font-medium text-slate-800">{account.nom}</td>
+                      <td className="px-4 py-4 text-[16px] font-medium text-slate-800">
+                        {account.nom}
+                        {isDepenseAccount && <span className="ml-2 text-xs font-normal text-slate-400">(du jour)</span>}
+                      </td>
                       <td className="px-4 py-4">{account.devise}</td>
                       <td className="px-4 py-4">{formatNumber(account.tauxFCFA || 1)}</td>
-                      <td className="px-4 py-4 text-right text-[16px] font-black text-slate-800">{formatCurrencyFCFA(account.soldeCalculeFCFA || 0)}</td>
-                      <td className="px-4 py-4 text-right">{formatNumber(account.equivalentUnits || 0)} {account.devise}</td>
+                      <td className="px-4 py-4 text-right text-[16px] font-black text-slate-800">{formatCurrencyFCFA(displaySolde)}</td>
+                      <td className="px-4 py-4 text-right">{formatNumber(displayUnits)} {account.devise}</td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex justify-end gap-3">
                           <button onClick={() => openEditCompteModal(account)} className="text-blue-600 hover:text-blue-700"><Edit3 size={16} /></button>
@@ -1786,7 +1793,8 @@ export default function ComptabilitePage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-blue-50/70 font-semibold text-slate-800">
