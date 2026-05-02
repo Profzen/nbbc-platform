@@ -6,6 +6,7 @@ import TontineOffre from '@/models/TontineOffre';
 import TontineAdhesion from '@/models/TontineAdhesion';
 import TontineTour from '@/models/TontineTour';
 import { logActivity } from '@/lib/activity-logger';
+import { buildPaygateHostedPaymentUrl, isPaygateEnabled } from '@/lib/paygate';
 
 const ROLES_CAN_MANAGE = new Set(['SUPER_ADMIN', 'AGENT']);
 
@@ -76,6 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const requestedUserId = String(body?.userId || '').trim();
     const clientUserId = role === 'TONTINE_CLIENT' ? userId : (requestedUserId || userId);
     const moyenPaiementChoisi = String(body?.moyenPaiementChoisi || 'MANUEL').trim().toUpperCase();
+    const paymentNetwork = String(body?.paymentNetwork || '').trim().toUpperCase();
 
     if (!clientUserId) {
       return NextResponse.json({ success: false, error: 'Utilisateur cible introuvable.' }, { status: 400 });
@@ -85,8 +87,41 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ success: false, error: 'Moyen de paiement non autorisé pour cette offre.' }, { status: 400 });
     }
 
+    if (role === 'TONTINE_CLIENT' && moyenPaiementChoisi === 'CARTE') {
+      return NextResponse.json(
+        { success: false, error: 'Le paiement carte n\'est pas encore active sur ce canal.' },
+        { status: 400 }
+      );
+    }
+
+    if (role === 'TONTINE_CLIENT' && moyenPaiementChoisi === 'MOBILE_MONEY' && !isPaygateEnabled()) {
+      return NextResponse.json(
+        { success: false, error: 'Paiement mobile money indisponible: configuration PayGate manquante.' },
+        { status: 400 }
+      );
+    }
+
     const existing = await TontineAdhesion.findOne({ offreId: offre._id, clientUserId });
     if (existing) {
+      if (existing.statut === 'EN_ATTENTE' && existing.paymentStatus === 'PENDING' && existing.paymentIdentifier) {
+        const redirectUrl = buildPaygateHostedPaymentUrl({
+          amount: offre.montantCotisation,
+          identifier: existing.paymentIdentifier,
+          description: `Adhesion tontine ${offre.nom}`,
+          network: paymentNetwork || undefined,
+        });
+        return NextResponse.json({
+          success: true,
+          data: {
+            adhesion: existing,
+            payment: {
+              provider: 'PAYGATE',
+              mode: 'HOSTED_PAGE',
+              redirectUrl,
+            },
+          },
+        });
+      }
       return NextResponse.json({ success: false, error: 'Vous avez déjà adhéré à cette tontine.' }, { status: 409 });
     }
 
@@ -96,13 +131,58 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ success: false, error: 'La tontine classique est déjà complète.' }, { status: 400 });
     }
 
+    const shouldUsePaygate =
+      role === 'TONTINE_CLIENT' &&
+      ['MOBILE_MONEY'].includes(moyenPaiementChoisi) &&
+      isPaygateEnabled();
+
+    const paymentIdentifier = shouldUsePaygate
+      ? `NBBC-${String(offre._id)}-${String(clientUserId)}-${Date.now()}`
+      : undefined;
+
+    const initialStatut = shouldUsePaygate ? 'EN_ATTENTE' : 'VALIDEE';
+    const initialPaymentStatus = shouldUsePaygate ? 'PENDING' : 'NONE';
+
     const adhesion = await TontineAdhesion.create({
       offreId: offre._id,
       clientUserId,
-      statut: 'VALIDEE',
+      statut: initialStatut,
       moyenPaiementChoisi,
+      paymentProvider: shouldUsePaygate ? 'PAYGATE' : undefined,
+      paymentStatus: initialPaymentStatus,
+      paymentIdentifier,
       ordrePassage: offre.categorie === 'CLASSIQUE' ? validatedCount + 1 : 1,
     });
+
+    if (shouldUsePaygate && paymentIdentifier) {
+      const redirectUrl = buildPaygateHostedPaymentUrl({
+        amount: offre.montantCotisation,
+        identifier: paymentIdentifier,
+        description: `Adhesion tontine ${offre.nom}`,
+        network: paymentNetwork || undefined,
+      });
+
+      await logActivity('Adhésion tontine (paiement en attente)', `${offre.nom} - ${offre.categorie}`, {
+        id: (session.user as any)?.id,
+        name: session.user?.name || '',
+        role,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            adhesion,
+            payment: {
+              provider: 'PAYGATE',
+              mode: 'HOSTED_PAGE',
+              redirectUrl,
+            },
+          },
+        },
+        { status: 201 }
+      );
+    }
 
     const validatedAfterInsert = validatedCount + 1;
     if (offre.categorie === 'CLASSIQUE') {

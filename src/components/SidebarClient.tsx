@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { signOut } from 'next-auth/react';
-import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet, LogOut, UserCircle } from 'lucide-react';
+import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet, LogOut } from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
 interface SidebarClientProps {
@@ -72,11 +72,11 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
             </div>
             <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
               <Link
-                href="/profil"
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${pathname === '/profil' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300'}`}
+                href="/tontines"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${pathname.startsWith('/tontines') ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300'}`}
               >
-                <UserCircle size={20} />
-                <span className="font-medium text-sm">Mon profil</span>
+                <Wallet size={20} />
+                <span className="font-medium text-sm">Tontines</span>
               </Link>
             </nav>
             <div className="p-4 border-t border-slate-800 space-y-3">
@@ -97,11 +97,11 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
         <nav className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur pb-[max(env(safe-area-inset-bottom),0px)] ${isNativeApp ? 'block' : 'hidden'}`}>
           <div className="flex px-2 py-1.5 gap-1 justify-center">
             <Link
-              href="/profil"
-              className={`flex-none w-[74px] flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-semibold rounded-lg transition-colors ${pathname === '/profil' ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}
+              href="/tontines"
+              className={`flex-none w-[74px] flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-semibold rounded-lg transition-colors ${pathname.startsWith('/tontines') ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}
             >
-              <UserCircle size={18} />
-              <span>Mon profil</span>
+              <Wallet size={18} />
+              <span>Tontines</span>
             </Link>
           </div>
         </nav>

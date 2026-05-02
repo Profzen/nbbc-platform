@@ -8,6 +8,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 type Role = 'SUPER_ADMIN' | 'AGENT' | 'ANALYSTE' | 'COMPLIANCE' | 'TONTINE_CLIENT';
 type Categorie = 'EPARGNE' | 'CLASSIQUE';
 type Frequence = 'HEBDOMADAIRE' | 'BI_HEBDOMADAIRE' | 'MENSUELLE';
+type DureeUnite = 'SEMAINE' | 'MOIS' | 'ANNEE';
 type Moyen = 'CRYPTO' | 'MOBILE_MONEY' | 'CARTE' | 'BANQUE' | 'MANUEL';
 
 const ALL_MOYENS: Moyen[] = ['MANUEL', 'MOBILE_MONEY', 'BANQUE', 'CARTE', 'CRYPTO'];
@@ -27,9 +28,35 @@ export default function NouvelleOffreTontinePage() {
     montantCotisation: '',
     frequence: 'HEBDOMADAIRE' as Frequence,
     nombreMembresCible: '5',
+    dureeValeur: '12',
+    dureeUnite: 'MOIS' as DureeUnite,
     dateDebutPrevue: '',
     moyensPaiementAcceptes: ['MANUEL'] as Moyen[],
   });
+
+  const computeEpargneEcheances = () => {
+    const dureeValeur = Math.max(0, Math.floor(Number(formData.dureeValeur) || 0));
+    const dureeUnite = formData.dureeUnite;
+    const frequence = formData.frequence;
+
+    if (dureeValeur <= 0) return 0;
+
+    if (dureeUnite === 'ANNEE') {
+      if (frequence === 'HEBDOMADAIRE') return dureeValeur * 52;
+      if (frequence === 'BI_HEBDOMADAIRE') return dureeValeur * 26;
+      return dureeValeur * 12;
+    }
+
+    if (dureeUnite === 'MOIS') {
+      if (frequence === 'HEBDOMADAIRE') return dureeValeur * 4;
+      if (frequence === 'BI_HEBDOMADAIRE') return dureeValeur * 2;
+      return dureeValeur;
+    }
+
+    if (frequence === 'HEBDOMADAIRE') return dureeValeur;
+    if (frequence === 'BI_HEBDOMADAIRE') return Math.floor(dureeValeur / 2);
+    return Math.floor(dureeValeur / 4);
+  };
 
   useEffect(() => {
     (async () => {
@@ -76,6 +103,19 @@ export default function NouvelleOffreTontinePage() {
       return;
     }
 
+    if (formData.categorie === 'EPARGNE') {
+      const dureeValeur = Number(formData.dureeValeur);
+      if (!Number.isFinite(dureeValeur) || dureeValeur <= 0) {
+        setError('La durée totale de la tontine épargne est obligatoire.');
+        return;
+      }
+
+      if (computeEpargneEcheances() < 1) {
+        setError('Durée incohérente avec la fréquence choisie.');
+        return;
+      }
+    }
+
     const payload = {
       nom: formData.nom.trim(),
       categorie: formData.categorie,
@@ -83,6 +123,8 @@ export default function NouvelleOffreTontinePage() {
       montantCotisation: montant,
       frequence: formData.frequence,
       nombreMembresCible: formData.categorie === 'CLASSIQUE' ? Number(formData.nombreMembresCible) : 1,
+      dureeValeur: formData.categorie === 'EPARGNE' ? Number(formData.dureeValeur) : undefined,
+      dureeUnite: formData.categorie === 'EPARGNE' ? formData.dureeUnite : undefined,
       dateDebutPrevue: formData.dateDebutPrevue || undefined,
       moyensPaiementAcceptes: formData.moyensPaiementAcceptes,
     };
@@ -228,6 +270,38 @@ export default function NouvelleOffreTontinePage() {
                 onChange={(e) => setFormData((prev) => ({ ...prev, nombreMembresCible: e.target.value }))}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
+            </div>
+          )}
+
+          {formData.categorie === 'EPARGNE' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Durée totale</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={formData.dureeValeur}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, dureeValeur: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Unité de durée</label>
+                <select
+                  value={formData.dureeUnite}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, dureeUnite: e.target.value as DureeUnite }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                >
+                  <option value="SEMAINE">Semaine(s)</option>
+                  <option value="MOIS">Mois</option>
+                  <option value="ANNEE">Année(s)</option>
+                </select>
+              </div>
+              <div className="md:col-span-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                Échéances prévues: <span className="font-semibold">{computeEpargneEcheances()}</span>
+                {' '}({formData.frequence.toLowerCase().replace('_', ' ')})
+              </div>
             </div>
           )}
 

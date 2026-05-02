@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export type TontineCategorie = 'EPARGNE' | 'CLASSIQUE';
 export type TontineFrequence = 'HEBDOMADAIRE' | 'BI_HEBDOMADAIRE' | 'MENSUELLE';
+export type TontineDureeUnite = 'SEMAINE' | 'MOIS' | 'ANNEE';
 export type TontineOffreStatut = 'BROUILLON' | 'OUVERTE' | 'COMPLETE' | 'EN_COURS' | 'SUSPENDUE' | 'CLOTUREE';
 export type TontineMoyenPaiement = 'CRYPTO' | 'MOBILE_MONEY' | 'CARTE' | 'BANQUE' | 'MANUEL';
 
@@ -16,6 +17,8 @@ export interface ITontineOffre extends Document {
   montantLot: number;
   nombreTours: number;
   dureeSemaines: number;
+  dureeValeur?: number;
+  dureeUnite?: TontineDureeUnite;
   dateDebutPrevue?: Date;
   statut: TontineOffreStatut;
   createdBy: Types.ObjectId;
@@ -38,6 +41,8 @@ const TontineOffreSchema = new Schema<ITontineOffre>(
     montantLot: { type: Number, required: true, min: 0 },
     nombreTours: { type: Number, required: true, min: 1 },
     dureeSemaines: { type: Number, required: true, min: 1 },
+    dureeValeur: { type: Number, min: 1 },
+    dureeUnite: { type: String, enum: ['SEMAINE', 'MOIS', 'ANNEE'] },
     dateDebutPrevue: { type: Date },
     statut: {
       type: String,

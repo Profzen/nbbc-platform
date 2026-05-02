@@ -33,6 +33,9 @@ interface Adhesion {
   offreId: Offre;
   statut: 'EN_ATTENTE' | 'VALIDEE' | 'REFUSEE' | 'RETIREE';
   moyenPaiementChoisi: Moyen;
+  paymentStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+  paymentIdentifier?: string;
+  paygateTxReference?: string;
   ordrePassage?: number;
   createdAt: string;
 }
@@ -59,6 +62,16 @@ const STATUT_LABEL: Record<Statut, string> = {
 };
 
 const MOYENS: Moyen[] = ['MANUEL', 'MOBILE_MONEY', 'BANQUE', 'CARTE', 'CRYPTO'];
+const PAYMENT_NETWORKS = ['FLOOZ', 'TMONEY'] as const;
+
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  NONE: 'Sans paiement en ligne',
+  PENDING: 'Paiement en attente',
+  SUCCESS: 'Paiement confirme',
+  FAILED: 'Paiement echoue',
+  EXPIRED: 'Paiement expire',
+  CANCELLED: 'Paiement annule',
+};
 
 export default function TontinesPage() {
   const router = useRouter();
@@ -66,7 +79,9 @@ export default function TontinesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [selectedMoyens, setSelectedMoyens] = useState<Record<string, Moyen>>({});
+  const [selectedNetworks, setSelectedNetworks] = useState<Record<string, string>>({});
 
   const loadTontines = async () => {
     const res = await fetch('/api/tontines');
@@ -118,18 +133,24 @@ export default function TontinesPage() {
 
   const handleJoin = async (offre: Offre) => {
     const moyen = selectedMoyens[offre._id] || offre.moyensPaiementAcceptes?.[0] || 'MANUEL';
+    const paymentNetwork = selectedNetworks[offre._id] || 'FLOOZ';
     setJoiningId(offre._id);
     setError(null);
     try {
       const res = await fetch(`/api/tontines/offres/${offre._id}/adhesions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moyenPaiementChoisi: moyen }),
+        body: JSON.stringify({ moyenPaiementChoisi: moyen, paymentNetwork }),
       });
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Adhésion impossible.');
       } else {
+        const redirectUrl = data?.data?.payment?.redirectUrl;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+          return;
+        }
         const refreshed = await loadTontines();
         if (refreshed.success) {
           setPayload(refreshed.data as ApiResponse);
@@ -139,6 +160,29 @@ export default function TontinesPage() {
       setError("Erreur réseau pendant l'adhésion.");
     }
     setJoiningId(null);
+  };
+
+  const verifyPayment = async (offreId: string, adhesionId: string) => {
+    setVerifyingId(adhesionId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tontines/offres/${offreId}/adhesions/${adhesionId}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Verification impossible.');
+      } else {
+        const refreshed = await loadTontines();
+        if (refreshed.success) {
+          setPayload(refreshed.data as ApiResponse);
+        }
+      }
+    } catch {
+      setError('Erreur reseau pendant la verification de paiement.');
+    }
+    setVerifyingId(null);
   };
 
   if (loading) return <LoadingSpinner />;
@@ -173,6 +217,15 @@ export default function TontinesPage() {
       )}
 
       {isClient && (
+        <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900">Parcours client simplifie</h2>
+          <p className="mt-1 text-sm text-slate-700">
+            1) Choisir une offre, 2) Choisir Mobile Money, 3) Payer sur la page securisee PayGate, 4) Revenir et verifier le statut.
+          </p>
+        </section>
+      )}
+
+      {isClient && (
         <section className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-900 mb-3">Mes adhésions</h2>
           <div className="space-y-3">
@@ -186,10 +239,24 @@ export default function TontinesPage() {
                   <p className="text-sm text-slate-600">
                     {adhesion.offreId?.categorie === 'CLASSIQUE' ? 'Classique rotative' : 'Épargne'} • {adhesion.moyenPaiementChoisi}
                   </p>
+                  {adhesion.paymentStatus && (
+                    <p className="text-xs text-slate-500 mt-1">{PAYMENT_STATUS_LABEL[adhesion.paymentStatus] || adhesion.paymentStatus}</p>
+                  )}
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 text-xs font-semibold">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {adhesion.statut}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 text-xs font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {adhesion.statut}
+                  </div>
+                  {adhesion.paymentStatus === 'PENDING' && (
+                    <button
+                      onClick={() => verifyPayment(String(adhesion.offreId?._id || ''), adhesion._id)}
+                      disabled={verifyingId === adhesion._id}
+                      className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                    >
+                      {verifyingId === adhesion._id ? 'Verification...' : 'Verifier paiement'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -220,6 +287,7 @@ export default function TontinesPage() {
             const isClassique = offre.categorie === 'CLASSIQUE';
             const moyens = offre.moyensPaiementAcceptes?.length ? offre.moyensPaiementAcceptes : MOYENS;
             const selected = selectedMoyens[offre._id] || moyens[0];
+            const selectedNetwork = selectedNetworks[offre._id] || 'FLOOZ';
 
             return (
               <article key={offre._id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
@@ -274,12 +342,31 @@ export default function TontinesPage() {
                         <option key={m} value={m}>{m}</option>
                       ))}
                     </select>
+                    {selected === 'MOBILE_MONEY' && (
+                      <>
+                        <label className="block text-sm font-medium text-slate-700">Operateur mobile money</label>
+                        <select
+                          value={selectedNetwork}
+                          onChange={(e) =>
+                            setSelectedNetworks((prev) => ({ ...prev, [offre._id]: e.target.value }))
+                          }
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          {PAYMENT_NETWORKS.map((network) => (
+                            <option key={network} value={network}>{network}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-slate-500">
+                          Vous serez redirige vers la page securisee PayGate pour finaliser le paiement.
+                        </p>
+                      </>
+                    )}
                     <button
                       onClick={() => handleJoin(offre)}
                       disabled={joiningId === offre._id || (offre.placesRestantes || 0) <= 0}
                       className="w-full rounded-lg bg-emerald-600 text-white py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      {joiningId === offre._id ? 'Adhésion en cours...' : 'Adhérer à cette tontine'}
+                      {joiningId === offre._id ? 'Preparation...' : 'Adherer et payer'}
                     </button>
                   </div>
                 )}

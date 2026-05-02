@@ -2,18 +2,43 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
-import TontineOffre, { TontineCategorie, TontineFrequence, TontineMoyenPaiement } from '@/models/TontineOffre';
+import TontineOffre, { TontineCategorie, TontineDureeUnite, TontineFrequence, TontineMoyenPaiement } from '@/models/TontineOffre';
 import TontineAdhesion from '@/models/TontineAdhesion';
 import { logActivity } from '@/lib/activity-logger';
 
 const ROLES_CAN_CREATE_OFFRE = new Set(['SUPER_ADMIN', 'AGENT']);
 const FREQUENCES: TontineFrequence[] = ['HEBDOMADAIRE', 'BI_HEBDOMADAIRE', 'MENSUELLE'];
 const MOYENS_PAIEMENT: TontineMoyenPaiement[] = ['CRYPTO', 'MOBILE_MONEY', 'CARTE', 'BANQUE', 'MANUEL'];
+const DUREE_UNITES: TontineDureeUnite[] = ['SEMAINE', 'MOIS', 'ANNEE'];
 
 function getFrequencyWeeks(frequence: TontineFrequence) {
   if (frequence === 'HEBDOMADAIRE') return 1;
   if (frequence === 'BI_HEBDOMADAIRE') return 2;
   return 4;
+}
+
+function toTotalWeeks(dureeValeur: number, dureeUnite: TontineDureeUnite) {
+  if (dureeUnite === 'SEMAINE') return dureeValeur;
+  if (dureeUnite === 'MOIS') return dureeValeur * 4;
+  return dureeValeur * 52;
+}
+
+function toCycleCount(dureeValeur: number, dureeUnite: TontineDureeUnite, frequence: TontineFrequence) {
+  if (dureeUnite === 'ANNEE') {
+    if (frequence === 'HEBDOMADAIRE') return dureeValeur * 52;
+    if (frequence === 'BI_HEBDOMADAIRE') return dureeValeur * 26;
+    return dureeValeur * 12;
+  }
+
+  if (dureeUnite === 'MOIS') {
+    if (frequence === 'HEBDOMADAIRE') return dureeValeur * 4;
+    if (frequence === 'BI_HEBDOMADAIRE') return dureeValeur * 2;
+    return dureeValeur;
+  }
+
+  if (frequence === 'HEBDOMADAIRE') return dureeValeur;
+  if (frequence === 'BI_HEBDOMADAIRE') return Math.floor(dureeValeur / 2);
+  return Math.floor(dureeValeur / 4);
 }
 
 export async function GET() {
@@ -91,6 +116,8 @@ export async function POST(request: Request) {
     const description = String(body?.description || '').trim();
     const montantCotisation = Number(body?.montantCotisation);
     const frequence = String(body?.frequence || '').trim().toUpperCase() as TontineFrequence;
+    const dureeValeurRaw = Number(body?.dureeValeur);
+    const dureeUnite = String(body?.dureeUnite || 'MOIS').trim().toUpperCase() as TontineDureeUnite;
     const dateDebutPrevue = body?.dateDebutPrevue ? new Date(body.dateDebutPrevue) : undefined;
 
     const moyensPaiementAcceptesRaw = Array.isArray(body?.moyensPaiementAcceptes)
@@ -112,6 +139,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Fréquence invalide.' }, { status: 400 });
     }
 
+    if (!DUREE_UNITES.includes(dureeUnite)) {
+      return NextResponse.json({ success: false, error: 'Unité de durée invalide.' }, { status: 400 });
+    }
+
     if (moyensPaiementAcceptes.length === 0) {
       return NextResponse.json({ success: false, error: 'Aucun moyen de paiement valide fourni.' }, { status: 400 });
     }
@@ -119,6 +150,7 @@ export async function POST(request: Request) {
     await dbConnect();
 
     let nombreMembresCible = 1;
+    let dureeValeur: number | undefined;
     if (categorie === 'CLASSIQUE') {
       nombreMembresCible = Number(body?.nombreMembresCible);
       if (!Number.isFinite(nombreMembresCible) || nombreMembresCible < 2) {
@@ -127,12 +159,34 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    } else {
+      if (!Number.isFinite(dureeValeurRaw) || dureeValeurRaw < 1) {
+        return NextResponse.json(
+          { success: false, error: 'La durée totale de l\'épargne est obligatoire (minimum 1).' },
+          { status: 400 }
+        );
+      }
+      dureeValeur = Math.floor(dureeValeurRaw);
     }
 
     const periodiciteSemaines = getFrequencyWeeks(frequence);
     const montantLot = montantCotisation * nombreMembresCible;
-    const nombreTours = categorie === 'CLASSIQUE' ? nombreMembresCible : 1;
-    const dureeSemaines = nombreTours * periodiciteSemaines;
+    const nombreTours =
+      categorie === 'CLASSIQUE'
+        ? nombreMembresCible
+        : toCycleCount(dureeValeur || 1, dureeUnite, frequence);
+
+    if (!Number.isFinite(nombreTours) || nombreTours < 1) {
+      return NextResponse.json(
+        { success: false, error: 'Durée incohérente avec la fréquence choisie.' },
+        { status: 400 }
+      );
+    }
+
+    const dureeSemaines =
+      categorie === 'CLASSIQUE'
+        ? nombreTours * periodiciteSemaines
+        : toTotalWeeks(dureeValeur || 1, dureeUnite);
 
     const offre = await TontineOffre.create({
       nom,
@@ -145,6 +199,8 @@ export async function POST(request: Request) {
       montantLot,
       nombreTours,
       dureeSemaines,
+      dureeValeur,
+      dureeUnite: categorie === 'EPARGNE' ? dureeUnite : undefined,
       dateDebutPrevue,
       statut: 'OUVERTE',
       createdBy: (session.user as any)?.id,
