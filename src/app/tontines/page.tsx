@@ -80,6 +80,7 @@ export default function TontinesPage() {
   const [error, setError] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMoyens, setSelectedMoyens] = useState<Record<string, Moyen>>({});
   const [selectedNetworks, setSelectedNetworks] = useState<Record<string, string>>({});
 
@@ -160,6 +161,25 @@ export default function TontinesPage() {
       setError("Erreur réseau pendant l'adhésion.");
     }
     setJoiningId(null);
+  };
+
+  const handleDelete = async (offre: Offre) => {
+    if (!confirm(`Supprimer l'offre "${offre.nom}" ? Cette action supprimera aussi toutes les adhésions et tours associés.`)) return;
+    setDeletingId(offre._id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tontines/offres/${offre._id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Suppression impossible.');
+      } else {
+        const refreshed = await loadTontines();
+        if (refreshed.success) setPayload(refreshed.data as ApiResponse);
+      }
+    } catch {
+      setError('Erreur réseau pendant la suppression.');
+    }
+    setDeletingId(null);
   };
 
   const verifyPayment = async (offreId: string, adhesionId: string) => {
@@ -372,12 +392,21 @@ export default function TontinesPage() {
                 )}
 
                 {!isClient && (
-                  <button
-                    onClick={() => router.push(`/tontines/${offre._id}`)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  >
-                    Voir le détail
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => router.push(`/tontines/${offre._id}`)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      Voir le détail
+                    </button>
+                    <button
+                      onClick={() => handleDelete(offre)}
+                      disabled={deletingId === offre._id}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                    >
+                      {deletingId === offre._id ? 'Suppression...' : 'Supprimer'}
+                    </button>
+                  </div>
                 )}
               </article>
             );

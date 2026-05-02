@@ -48,3 +48,47 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Accès refusé.' }, { status: 403 });
+    }
+
+    const role = (session.user as any)?.role;
+    if (role !== 'SUPER_ADMIN' && role !== 'AGENT') {
+      return NextResponse.json({ success: false, error: 'Action non autorisée.' }, { status: 403 });
+    }
+
+    const { id } = await context.params;
+    await dbConnect();
+
+    const offre = await TontineOffre.findById(id).lean();
+    if (!offre) {
+      return NextResponse.json({ success: false, error: 'Offre introuvable.' }, { status: 404 });
+    }
+
+    // Refuse si l'offre est EN_COURS et a des adhésions validées
+    if ((offre as any).statut === 'EN_COURS') {
+      const nbValidees = await TontineAdhesion.countDocuments({ offreId: id, statut: 'VALIDEE' });
+      if (nbValidees > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Impossible de supprimer une tontine en cours avec des membres validés.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Suppression en cascade
+    await Promise.all([
+      TontineAdhesion.deleteMany({ offreId: id }),
+      TontineTour.deleteMany({ offreId: id }),
+      TontineOffre.findByIdAndDelete(id),
+    ]);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
