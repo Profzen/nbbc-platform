@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
 import TontineOffre, { TontineCategorie, TontineDureeUnite, TontineFrequence, TontineMoyenPaiement } from '@/models/TontineOffre';
 import TontineAdhesion from '@/models/TontineAdhesion';
+import TontineTour from '@/models/TontineTour';
 import { logActivity } from '@/lib/activity-logger';
 
 const ROLES_CAN_CREATE_OFFRE = new Set(['SUPER_ADMIN', 'AGENT']);
@@ -79,12 +80,22 @@ export async function GET() {
         .sort({ createdAt: -1 })
         .lean();
 
+      const mesAdhesionsWithTours = await Promise.all(
+        mesAdhesions.map(async (adhesion) => {
+          const monTour = await TontineTour.findOne({
+            offreId: adhesion.offreId,
+            beneficiaireUserId: userId,
+          }).lean();
+          return { ...adhesion, monTour: monTour || null };
+        })
+      );
+
       return NextResponse.json({
         success: true,
         data: {
           role,
           offres: offresWithStats.filter((offre) => ['OUVERTE', 'COMPLETE', 'EN_COURS'].includes(offre.statut)),
-          mesAdhesions,
+          mesAdhesions: mesAdhesionsWithTours,
         },
       });
     }
