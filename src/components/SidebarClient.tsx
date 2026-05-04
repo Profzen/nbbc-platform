@@ -5,15 +5,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { signOut } from 'next-auth/react';
-import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet, LogOut } from 'lucide-react';
+import { Users, CreditCard, BarChart3, Settings, ShieldCheck, Megaphone, PenTool, BookOpen, Menu, X, Globe, Package, Activity, Wallet, LogOut, ClipboardList } from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
 interface SidebarClientProps {
   session: any;
   pendingKyc: number;
+  pendingTontineValidations: number;
 }
 
-export default function SidebarClient({ session, pendingKyc }: SidebarClientProps) {
+export default function SidebarClient({ session, pendingKyc, pendingTontineValidations }: SidebarClientProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isNativeApp, setIsNativeApp] = useState(false);
   const pathname = usePathname();
@@ -114,6 +115,7 @@ export default function SidebarClient({ session, pendingKyc }: SidebarClientProp
     { href: '/clients', label: 'Clients', icon: Users },
     { href: '/cartes', label: 'Cartes & Comptes', icon: CreditCard },
     { href: '/tontines', label: 'Tontines', icon: Wallet },
+    { href: '/tontines/validations', label: 'Validations tontines', icon: ClipboardList, badge: pendingTontineValidations },
     { href: '/signatures', label: 'E-Signature', icon: PenTool },
     { href: '/comptabilite', label: 'Comptabilité', icon: BookOpen },
     { href: '/kyc', label: 'Vérification KYC', icon: ShieldCheck, badge: pendingKyc },

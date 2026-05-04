@@ -4,8 +4,10 @@ import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
 import TontineOffre, { TontineCategorie, TontineDureeUnite, TontineFrequence, TontineMoyenPaiement } from '@/models/TontineOffre';
 import TontineAdhesion from '@/models/TontineAdhesion';
+import TontineAdhesionEcheance from '@/models/TontineAdhesionEcheance';
 import TontineTour from '@/models/TontineTour';
 import { logActivity } from '@/lib/activity-logger';
+import { getEffectiveEcheanceStatut } from '@/lib/tontine-schedule';
 
 const ROLES_CAN_CREATE_OFFRE = new Set(['SUPER_ADMIN', 'AGENT']);
 const FREQUENCES: TontineFrequence[] = ['HEBDOMADAIRE', 'BI_HEBDOMADAIRE', 'MENSUELLE'];
@@ -82,11 +84,26 @@ export async function GET() {
 
       const mesAdhesionsWithTours = await Promise.all(
         mesAdhesions.map(async (adhesion) => {
-          const monTour = await TontineTour.findOne({
-            offreId: adhesion.offreId,
-            beneficiaireUserId: userId,
-          }).lean();
-          return { ...adhesion, monTour: monTour || null };
+          const [monTour, echeances] = await Promise.all([
+            TontineTour.findOne({
+              offreId: adhesion.offreId,
+              beneficiaireUserId: userId,
+            }).lean(),
+            TontineAdhesionEcheance.find({ adhesionId: adhesion._id })
+              .sort({ numeroEcheance: 1 })
+              .lean(),
+          ]);
+
+          const normalizedEcheances = echeances.map((echeance) => ({
+            ...echeance,
+            statut: getEffectiveEcheanceStatut(echeance),
+          }));
+
+          return {
+            ...adhesion,
+            monTour: monTour || null,
+            echeances: normalizedEcheances,
+          };
         })
       );
 

@@ -38,5 +38,5 @@ export default withAuth(
 
 export const config = {
   // Protéger toutes les routes sauf login, pages KYC/Sign publiques (UUID), et api/auth
-  matcher: ["/((?!login|register|privacy|delete-account|kyc\\/[0-9a-f-]{36}|sign\\/[0-9a-f-]{36}|api\\/kyc\\/(?!requests)[^/]+|api\\/signatures\\/(?!templates|requests)[^/]+|api\\/cloudinary\\/sign|api\\/notify\\/paygate|api\\/auth|_next\\/static|_next\\/image|favicon\\.ico).*)"],
+  matcher: ["/((?!login|register|privacy|delete-account|kyc\\/[0-9a-f-]{36}|sign\\/[0-9a-f-]{36}|api\\/kyc\\/(?!requests)[^/]+|api\\/signatures\\/(?!templates|requests)[^/]+|api\\/cloudinary\\/sign|api\\/notify\\/paygate|api\\/tontines\\/scheduled|api\\/auth|_next\\/static|_next\\/image|favicon\\.ico).*)"],
 };

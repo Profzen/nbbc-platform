@@ -2,13 +2,29 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Users, Repeat, PiggyBank, CheckCircle2, AlertCircle, Clock, Trophy, Calendar, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  PiggyBank,
+  Plus,
+  RefreshCw,
+  Repeat,
+  Trophy,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
 type Role = 'SUPER_ADMIN' | 'AGENT' | 'ANALYSTE' | 'COMPLIANCE' | 'TONTINE_CLIENT';
 type Categorie = 'EPARGNE' | 'CLASSIQUE';
 type Statut = 'BROUILLON' | 'OUVERTE' | 'COMPLETE' | 'EN_COURS' | 'SUSPENDUE' | 'CLOTUREE';
 type Moyen = 'CRYPTO' | 'MOBILE_MONEY' | 'CARTE' | 'BANQUE' | 'MANUEL';
+type EcheanceStatut = 'A_PREVOIR' | 'EN_ATTENTE' | 'EN_RETARD' | 'PAYEE' | 'ANNULEE';
+type PaymentStatus = 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 
 interface Offre {
   _id: string;
@@ -36,18 +52,30 @@ interface MonTour {
   montantLot: number;
 }
 
+interface Echeance {
+  _id: string;
+  numeroEcheance: number;
+  dateEcheance: string;
+  montantPrevu: number;
+  montantPaye: number;
+  statut: EcheanceStatut;
+  paymentStatus: PaymentStatus;
+  moyenPaiementChoisi: Moyen;
+  validationStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  validationNote?: string;
+  paygatePaymentReference?: string;
+  paidAt?: string;
+}
+
 interface Adhesion {
   _id: string;
   offreId: Offre;
   statut: 'EN_ATTENTE' | 'VALIDEE' | 'REFUSEE' | 'RETIREE';
   moyenPaiementChoisi: Moyen;
-  paymentStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
-  paymentIdentifier?: string;
-  paygateTxReference?: string;
-  paygatePaymentReference?: string;
   ordrePassage?: number;
   createdAt: string;
   monTour?: MonTour | null;
+  echeances?: Echeance[];
 }
 
 interface ApiResponse {
@@ -71,34 +99,65 @@ const STATUT_LABEL: Record<Statut, string> = {
   CLOTUREE: 'Clôturée',
 };
 
-const MOYENS: Moyen[] = ['MANUEL', 'MOBILE_MONEY', 'BANQUE', 'CARTE', 'CRYPTO'];
-const PAYMENT_NETWORKS = ['FLOOZ', 'TMONEY'] as const;
+const ECHEANCE_STATUT_LABEL: Record<EcheanceStatut, string> = {
+  A_PREVOIR: 'À venir',
+  EN_ATTENTE: 'À payer',
+  EN_RETARD: 'En retard',
+  PAYEE: 'Payée',
+  ANNULEE: 'Annulée',
+};
 
 const TOUR_STATUT_LABEL: Record<string, string> = {
   PLANIFIE: 'Planifié',
-  PAYE: 'Payé ✓',
+  PAYE: 'Payé',
   REPORTE: 'Reporté',
   ANNULE: 'Annulé',
 };
 
-const PAYMENT_STATUS_LABEL: Record<string, string> = {
-  NONE: 'Sans paiement en ligne',
+const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  NONE: 'Aucun paiement lancé',
   PENDING: 'Paiement en attente',
-  SUCCESS: 'Paiement confirme',
-  FAILED: 'Paiement echoue',
-  EXPIRED: 'Paiement expire',
-  CANCELLED: 'Paiement annule',
+  SUCCESS: 'Paiement confirmé',
+  FAILED: 'Paiement échoué',
+  EXPIRED: 'Paiement expiré',
+  CANCELLED: 'Paiement annulé',
 };
+
+const MOYENS: Moyen[] = ['MANUEL', 'MOBILE_MONEY', 'BANQUE', 'CARTE', 'CRYPTO'];
+const PAYMENT_NETWORKS = ['FLOOZ', 'TMONEY'] as const;
+
+function formatCurrency(value?: number) {
+  return `${Number(value || 0).toLocaleString('fr-FR')} XOF`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function getEcheanceBadgeClass(statut: EcheanceStatut) {
+  if (statut === 'PAYEE') return 'bg-emerald-100 text-emerald-700';
+  if (statut === 'EN_RETARD') return 'bg-red-100 text-red-700';
+  if (statut === 'EN_ATTENTE') return 'bg-amber-100 text-amber-700';
+  if (statut === 'ANNULEE') return 'bg-slate-200 text-slate-600';
+  return 'bg-blue-100 text-blue-700';
+}
 
 export default function TontinesPage() {
   const router = useRouter();
   const [payload, setPayload] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [payingEcheanceId, setPayingEcheanceId] = useState<string | null>(null);
+  const [verifyingEcheanceId, setVerifyingEcheanceId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openAdhesionId, setOpenAdhesionId] = useState<string | null>(null);
   const [selectedMoyens, setSelectedMoyens] = useState<Record<string, Moyen>>({});
   const [selectedNetworks, setSelectedNetworks] = useState<Record<string, string>>({});
 
@@ -150,11 +209,22 @@ export default function TontinesPage() {
     return all.filter((offre) => !adheredOfferIds.has(offre._id) && (offre.statut === 'OUVERTE' || offre.statut === 'EN_COURS'));
   }, [payload?.offres, isClient, adheredOfferIds]);
 
+  const refreshPayload = async () => {
+    const refreshed = await loadTontines();
+    if (refreshed.success) {
+      setPayload(refreshed.data as ApiResponse);
+    } else {
+      setError(refreshed.error || 'Impossible de recharger les données.');
+    }
+  };
+
   const handleJoin = async (offre: Offre) => {
     const moyen = selectedMoyens[offre._id] || offre.moyensPaiementAcceptes?.[0] || 'MANUEL';
     const paymentNetwork = selectedNetworks[offre._id] || 'FLOOZ';
     setJoiningId(offre._id);
     setError(null);
+    setNotice(null);
+
     try {
       const res = await fetch(`/api/tontines/offres/${offre._id}/adhesions`, {
         method: 'POST',
@@ -165,83 +235,89 @@ export default function TontinesPage() {
       if (!data.success) {
         setError(data.error || 'Adhésion impossible.');
       } else {
-        const redirectUrl = data?.data?.payment?.redirectUrl;
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-          return;
-        }
-        const refreshed = await loadTontines();
-        if (refreshed.success) {
-          setPayload(refreshed.data as ApiResponse);
-        }
+        await refreshPayload();
+        setNotice(`Adhésion enregistrée à ${offre.nom}. Vos échéances sont maintenant disponibles.`);
       }
     } catch {
       setError("Erreur réseau pendant l'adhésion.");
     }
+
     setJoiningId(null);
   };
 
-  const handleRetryPayment = async (offreId: string, adhesionId: string) => {
-    setRetryingId(adhesionId);
+  const handlePayEcheance = async (offreId: string, adhesionId: string, echeanceId: string) => {
+    setPayingEcheanceId(echeanceId);
     setError(null);
+    setNotice(null);
+
     try {
-      const res = await fetch(`/api/tontines/offres/${offreId}/adhesions/${adhesionId}/repay`, {
+      const res = await fetch(`/api/tontines/offres/${offreId}/adhesions/${adhesionId}/echeances/${echeanceId}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (!data.success) {
-        setError(data.error || 'Reprise impossible.');
+        setError(data.error || 'Paiement impossible.');
       } else {
-        window.location.href = data.data.redirectUrl;
-        return;
+        const redirectUrl = data?.data?.payment?.redirectUrl;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+          return;
+        }
+
+        await refreshPayload();
+        setNotice('Échéance mise à jour avec succès.');
       }
     } catch {
-      setError('Erreur réseau.');
+      setError('Erreur réseau pendant le traitement du paiement.');
     }
-    setRetryingId(null);
+
+    setPayingEcheanceId(null);
+  };
+
+  const verifyEcheancePayment = async (offreId: string, adhesionId: string, echeanceId: string) => {
+    setVerifyingEcheanceId(echeanceId);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const res = await fetch(`/api/tontines/offres/${offreId}/adhesions/${adhesionId}/echeances/${echeanceId}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Vérification impossible.');
+      } else {
+        await refreshPayload();
+        setNotice('Statut de paiement actualisé.');
+      }
+    } catch {
+      setError('Erreur réseau pendant la vérification du paiement.');
+    }
+
+    setVerifyingEcheanceId(null);
   };
 
   const handleDelete = async (offre: Offre) => {
-    if (!confirm(`Supprimer l'offre "${offre.nom}" ? Cette action supprimera aussi toutes les adhésions et tours associés.`)) return;
+    if (!confirm(`Supprimer l'offre "${offre.nom}" ? Cette action supprimera aussi toutes les adhésions, échéances et tours associés.`)) return;
+
     setDeletingId(offre._id);
     setError(null);
+
     try {
       const res = await fetch(`/api/tontines/offres/${offre._id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Suppression impossible.');
       } else {
-        const refreshed = await loadTontines();
-        if (refreshed.success) setPayload(refreshed.data as ApiResponse);
+        await refreshPayload();
       }
     } catch {
       setError('Erreur réseau pendant la suppression.');
     }
-    setDeletingId(null);
-  };
 
-  const verifyPayment = async (offreId: string, adhesionId: string) => {
-    setVerifyingId(adhesionId);
-    setError(null);
-    try {
-      const res = await fetch(`/api/tontines/offres/${offreId}/adhesions/${adhesionId}/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.error || 'Verification impossible.');
-      } else {
-        const refreshed = await loadTontines();
-        if (refreshed.success) {
-          setPayload(refreshed.data as ApiResponse);
-        }
-      }
-    } catch {
-      setError('Erreur reseau pendant la verification de paiement.');
-    }
-    setVerifyingId(null);
+    setDeletingId(null);
   };
 
   if (loading) return <LoadingSpinner />;
@@ -253,7 +329,7 @@ export default function TontinesPage() {
           <h1 className="text-3xl font-bold text-slate-900">Tontines</h1>
           <p className="text-slate-600 mt-1">
             {isClient
-              ? 'Les deux modèles coexistent: le client choisit l’offre qui lui convient.'
+              ? 'Vous adhérez sans payer immédiatement. Chaque tontine ouvre ensuite un vrai suivi avec échéancier, statut et actions par échéance.'
               : 'Créez et pilotez les deux modèles de tontine en parallèle.'}
           </p>
         </div>
@@ -275,17 +351,24 @@ export default function TontinesPage() {
         </div>
       )}
 
+      {notice && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 inline-flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {notice}
+        </div>
+      )}
+
       {isClient && (
         <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-900">Parcours client simplifie</h2>
+          <h2 className="text-lg font-bold text-slate-900">Nouveau flux client</h2>
           <p className="mt-1 text-sm text-slate-700">
-            1) Choisir une offre, 2) Choisir Mobile Money, 3) Payer sur la page securisee PayGate, 4) Revenir et verifier le statut.
+            1) Vous adhérez à la tontine, 2) l'échéancier se crée automatiquement, 3) vous payez chaque échéance au moment voulu, 4) vous recevez des rappels email avant les dates limites.
           </p>
         </section>
       )}
 
       {isClient && (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-900">Mes Tontines</h2>
             <span className="text-sm text-slate-500">{(payload?.mesAdhesions || []).length} adhésion(s)</span>
@@ -297,126 +380,181 @@ export default function TontinesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {(payload?.mesAdhesions || []).map((adhesion) => {
               const offre = adhesion.offreId;
-              const isValidated = adhesion.statut === 'VALIDEE';
-              const isPayPending = adhesion.paymentStatus === 'PENDING';
-              const isPayRetryable = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(adhesion.paymentStatus || '');
-              const isPaySuccess = adhesion.paymentStatus === 'SUCCESS';
-              const isManualWaiting = adhesion.statut === 'EN_ATTENTE' && adhesion.paymentStatus === 'NONE';
-              const isMobileMoney = adhesion.moyenPaiementChoisi === 'MOBILE_MONEY';
+              const echeances = adhesion.echeances || [];
+              const payees = echeances.filter((item) => item.statut === 'PAYEE').length;
+              const enRetard = echeances.filter((item) => item.statut === 'EN_RETARD').length;
+              const prochaineEcheance = echeances.find((item) => item.statut !== 'PAYEE' && item.statut !== 'ANNULEE') || null;
+              const open = openAdhesionId === adhesion._id;
 
               return (
-                <div key={adhesion._id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
-                  {/* En-tête coloré selon statut */}
-                  <div className={`px-4 py-3 flex items-center justify-between border-b ${
-                    isValidated ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'
-                  }`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/80 border px-2 py-0.5 text-xs font-semibold text-slate-700 flex-shrink-0">
-                        {offre?.categorie === 'CLASSIQUE' ? <Repeat className="w-3 h-3" /> : <PiggyBank className="w-3 h-3" />}
-                        {offre?.categorie === 'CLASSIQUE' ? 'Classique' : 'Épargne'}
+                <article key={adhesion._id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-4 border-b border-slate-200 flex flex-col gap-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {offre?.categorie === 'CLASSIQUE' ? <Repeat className="w-3 h-3" /> : <PiggyBank className="w-3 h-3" />}
+                            {offre?.categorie === 'CLASSIQUE' ? 'Classique' : 'Épargne'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            <Wallet className="w-3 h-3" />
+                            {adhesion.moyenPaiementChoisi}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 mt-2 truncate">{offre?.nom || 'Offre supprimée'}</h3>
+                        <p className="text-sm text-slate-600 mt-1">{offre?.description || 'Suivi détaillé de vos cotisations et échéances.'}</p>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${enRetard > 0 ? 'bg-red-100 text-red-700' : payees === echeances.length && echeances.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {enRetard > 0 ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                        {enRetard > 0 ? `${enRetard} en retard` : payees === echeances.length && echeances.length > 0 ? 'Plan terminé' : 'Suivi actif'}
                       </span>
-                      <p className="font-bold text-slate-900 truncate">{offre?.nom || 'Offre supprimée'}</p>
                     </div>
-                    <span className={`ml-2 flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      isValidated ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {isValidated ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                      {isValidated ? 'Validée' : 'En attente'}
-                    </span>
-                  </div>
 
-                  {/* Corps */}
-                  <div className="p-4 space-y-3 flex-1">
-                    {/* Chiffres clés */}
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-lg bg-slate-50 px-3 py-2">
-                        <p className="text-xs text-slate-500">Cotisation</p>
-                        <p className="font-semibold text-slate-900">{offre?.montantCotisation?.toLocaleString('fr-FR')} XOF</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-slate-500 text-xs">Cotisation</p>
+                        <p className="font-semibold text-slate-900">{formatCurrency(offre?.montantCotisation)}</p>
                         <p className="text-xs text-slate-400">{offre?.frequence ? FREQUENCE_LABEL[offre.frequence] : ''}</p>
                       </div>
-                      <div className="rounded-lg bg-slate-50 px-3 py-2">
-                        <p className="text-xs text-slate-500">Lot à recevoir</p>
-                        <p className="font-semibold text-slate-900">{offre?.montantLot?.toLocaleString('fr-FR')} XOF</p>
-                        {adhesion.ordrePassage && <p className="text-xs text-slate-400">Passage #{adhesion.ordrePassage}</p>}
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-slate-500 text-xs">Échéances payées</p>
+                        <p className="font-semibold text-slate-900">{payees}/{echeances.length}</p>
+                        <p className="text-xs text-slate-400">{formatCurrency(payees * Number(offre?.montantCotisation || 0))}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-slate-500 text-xs">Prochaine échéance</p>
+                        <p className="font-semibold text-slate-900">{prochaineEcheance ? `#${prochaineEcheance.numeroEcheance}` : 'Aucune'}</p>
+                        <p className="text-xs text-slate-400">{prochaineEcheance ? formatDate(prochaineEcheance.dateEcheance) : 'Plan complété'}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-slate-500 text-xs">Lot / objectif</p>
+                        <p className="font-semibold text-slate-900">{formatCurrency(offre?.montantLot)}</p>
+                        {adhesion.ordrePassage ? <p className="text-xs text-slate-400">Passage #{adhesion.ordrePassage}</p> : <p className="text-xs text-slate-400">Adhésion {formatDate(adhesion.createdAt)}</p>}
                       </div>
                     </div>
 
-                    {/* Mon tour programmé */}
                     {adhesion.monTour && (
                       <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-sm">
                         <p className="text-xs font-semibold text-indigo-600 mb-1 flex items-center gap-1">
                           <Trophy className="w-3 h-3" /> Mon tour programmé
                         </p>
-                        <p className="text-slate-700 font-medium">Tour #{adhesion.monTour.numeroTour} — {adhesion.monTour.montantLot?.toLocaleString('fr-FR')} XOF</p>
+                        <p className="text-slate-700 font-medium">Tour #{adhesion.monTour.numeroTour} — {formatCurrency(adhesion.monTour.montantLot)}</p>
                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                           <Calendar className="w-3 h-3" />
-                          Prévu le {new Date(adhesion.monTour.datePrevue).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                          {' · '}{TOUR_STATUT_LABEL[adhesion.monTour.statut] || adhesion.monTour.statut}
+                          Prévu le {formatDate(adhesion.monTour.datePrevue)} · {TOUR_STATUT_LABEL[adhesion.monTour.statut] || adhesion.monTour.statut}
                         </p>
                       </div>
                     )}
 
-                    {/* Statut paiement Mobile Money */}
-                    {isMobileMoney && (
-                      <div className={`rounded-lg px-3 py-2 text-sm border ${
-                        isPaySuccess ? 'bg-emerald-50 border-emerald-100' :
-                        isPayPending ? 'bg-blue-50 border-blue-100' :
-                        isPayRetryable ? 'bg-red-50 border-red-100' :
-                        'bg-slate-50 border-slate-100'
-                      }`}>
-                        <p className={`font-medium text-xs ${
-                          isPaySuccess ? 'text-emerald-700' :
-                          isPayPending ? 'text-blue-700' :
-                          isPayRetryable ? 'text-red-700' : 'text-slate-600'
-                        }`}>
-                          Mobile Money · {PAYMENT_STATUS_LABEL[adhesion.paymentStatus || 'NONE']}
-                        </p>
-                        {adhesion.paygatePaymentReference && (
-                          <p className="text-xs text-slate-500 mt-0.5">Réf: {adhesion.paygatePaymentReference}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Attente validation manuelle */}
-                    {!isMobileMoney && isManualWaiting && (
-                      <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-xs text-amber-700">
-                        En attente de validation manuelle par l'équipe.
-                      </div>
-                    )}
-
-                    <p className="text-xs text-slate-400">
-                      Adhésion le {new Date(adhesion.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-slate-400">Adhésion enregistrée le {formatDate(adhesion.createdAt)}</p>
+                      <button
+                        onClick={() => setOpenAdhesionId((prev) => (prev === adhesion._id ? null : adhesion._id))}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                      >
+                        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {open ? 'Masquer le suivi' : 'Ouvrir le suivi'}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Actions */}
-                  {(isPayPending || isPayRetryable) && (
-                    <div className="px-4 pb-4 flex gap-2">
-                      {isPayPending && (
-                        <button
-                          onClick={() => verifyPayment(String(offre?._id || ''), adhesion._id)}
-                          disabled={verifyingId === adhesion._id}
-                          className="flex-1 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-                        >
-                          {verifyingId === adhesion._id ? 'Vérification...' : 'Vérifier le paiement'}
-                        </button>
-                      )}
-                      {isPayRetryable && isMobileMoney && (
-                        <button
-                          onClick={() => handleRetryPayment(String(offre?._id || ''), adhesion._id)}
-                          disabled={retryingId === adhesion._id}
-                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 text-white px-3 py-2 text-sm font-semibold hover:bg-orange-600 disabled:opacity-60"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          {retryingId === adhesion._id ? 'Préparation...' : 'Retenter le paiement'}
-                        </button>
-                      )}
+                  {open && (
+                    <div className="p-4 space-y-4">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-slate-500 border-b border-slate-200">
+                              <th className="py-2 pr-3 font-medium">Échéance</th>
+                              <th className="py-2 pr-3 font-medium">Date</th>
+                              <th className="py-2 pr-3 font-medium">Montant</th>
+                              <th className="py-2 pr-3 font-medium">Statut</th>
+                              <th className="py-2 pr-3 font-medium">Paiement</th>
+                              <th className="py-2 font-medium">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {echeances.map((echeance) => {
+                              const isPending = echeance.paymentStatus === 'PENDING';
+                              const isRetryable = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(echeance.paymentStatus);
+                              const isPaid = echeance.statut === 'PAYEE';
+                              const isMobileMoney = echeance.moyenPaiementChoisi === 'MOBILE_MONEY';
+                              const isWaitingAdmin = !isMobileMoney && echeance.validationStatus === 'PENDING';
+
+                              return (
+                                <tr key={echeance._id} className="border-b border-slate-100 last:border-0 align-top">
+                                  <td className="py-3 pr-3">
+                                    <div className="font-semibold text-slate-900">#{echeance.numeroEcheance}</div>
+                                    <div className="text-xs text-slate-500">{isMobileMoney ? 'Paiement en ligne' : 'Paiement déclaré'}</div>
+                                  </td>
+                                  <td className="py-3 pr-3 text-slate-700">{formatDate(echeance.dateEcheance)}</td>
+                                  <td className="py-3 pr-3 text-slate-700">
+                                    {formatCurrency(echeance.montantPrevu)}
+                                    {isPaid && (
+                                      <div className="text-xs text-slate-500">Payée le {formatDate(echeance.paidAt)}</div>
+                                    )}
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getEcheanceBadgeClass(echeance.statut)}`}>
+                                      {ECHEANCE_STATUT_LABEL[echeance.statut]}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    <div className="text-slate-700">{isWaitingAdmin ? 'En attente de validation agent' : PAYMENT_STATUS_LABEL[echeance.paymentStatus]}</div>
+                                    {echeance.paygatePaymentReference && (
+                                      <div className="text-xs text-slate-500">Réf: {echeance.paygatePaymentReference}</div>
+                                    )}
+                                    {echeance.validationNote && (
+                                      <div className="text-xs text-slate-500">{echeance.validationNote}</div>
+                                    )}
+                                  </td>
+                                  <td className="py-3">
+                                    {isPaid ? (
+                                      <span className="inline-flex items-center gap-1 text-emerald-700 text-sm font-semibold">
+                                        <CheckCircle2 className="w-4 h-4" /> Réglée
+                                      </span>
+                                    ) : isPending && isMobileMoney ? (
+                                      <button
+                                        onClick={() => verifyEcheancePayment(String(offre?._id || ''), adhesion._id, echeance._id)}
+                                        disabled={verifyingEcheanceId === echeance._id}
+                                        className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                                      >
+                                        {verifyingEcheanceId === echeance._id ? 'Vérification...' : 'Vérifier'}
+                                      </button>
+                                    ) : isWaitingAdmin ? (
+                                      <span className="inline-flex items-center gap-1 text-amber-700 text-sm font-semibold">
+                                        <Clock className="w-4 h-4" /> Validation agent
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handlePayEcheance(String(offre?._id || ''), adhesion._id, echeance._id)}
+                                        disabled={payingEcheanceId === echeance._id}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                                      >
+                                        {isRetryable && <RefreshCw className="w-4 h-4" />}
+                                        {payingEcheanceId === echeance._id
+                                          ? 'Traitement...'
+                                          : isRetryable
+                                            ? 'Retenter'
+                                            : echeance.statut === 'A_PREVOIR'
+                                              ? 'Payer en avance'
+                                              : isMobileMoney
+                                                ? 'Payer'
+                                                : 'Déclarer payé'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
-                </div>
+                </article>
               );
             })}
           </div>
@@ -426,11 +564,11 @@ export default function TontinesPage() {
       <section className="space-y-3">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
           <h2 className="text-xl font-semibold text-slate-900">
-            {isClient ? 'Choisissez votre modèle' : 'Catalogue des offres'}
+            {isClient ? 'Choisissez une tontine' : 'Catalogue des offres'}
           </h2>
           {isClient && (
             <p className="text-sm text-slate-500">
-              Épargne et classique rotative sont proposées ensemble. Vous pouvez adhérer à l’un ou l’autre selon votre besoin.
+              L'adhésion crée votre plan de cotisation. Le moyen choisi ci-dessous sera appliqué par défaut à vos prochaines échéances.
             </p>
           )}
         </div>
@@ -464,7 +602,7 @@ export default function TontinesPage() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-lg bg-slate-100 p-3">
                     <p className="text-slate-500">Cotisation</p>
-                    <p className="font-semibold text-slate-900">{offre.montantCotisation} XOF</p>
+                    <p className="font-semibold text-slate-900">{formatCurrency(offre.montantCotisation)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-100 p-3">
                     <p className="text-slate-500">Fréquence</p>
@@ -479,7 +617,7 @@ export default function TontinesPage() {
                   </div>
                   <div className="rounded-lg bg-slate-100 p-3">
                     <p className="text-slate-500">Lot/Tour</p>
-                    <p className="font-semibold text-slate-900">{offre.montantLot} XOF</p>
+                    <p className="font-semibold text-slate-900">{formatCurrency(offre.montantLot)}</p>
                   </div>
                 </div>
 
@@ -489,7 +627,7 @@ export default function TontinesPage() {
 
                 {isClient && (
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Moyen de paiement</label>
+                    <label className="block text-sm font-medium text-slate-700">Moyen de paiement par défaut</label>
                     <select
                       value={selected}
                       onChange={(e) =>
@@ -503,7 +641,7 @@ export default function TontinesPage() {
                     </select>
                     {selected === 'MOBILE_MONEY' && (
                       <>
-                        <label className="block text-sm font-medium text-slate-700">Operateur mobile money</label>
+                        <label className="block text-sm font-medium text-slate-700">Opérateur mobile money</label>
                         <select
                           value={selectedNetwork}
                           onChange={(e) =>
@@ -516,7 +654,7 @@ export default function TontinesPage() {
                           ))}
                         </select>
                         <p className="text-xs text-slate-500">
-                          Vous serez redirige vers la page securisee PayGate pour finaliser le paiement.
+                          Ce moyen sera utilisé lorsque vous cliquerez sur “Payer” pour une échéance donnée.
                         </p>
                       </>
                     )}
@@ -525,7 +663,7 @@ export default function TontinesPage() {
                       disabled={joiningId === offre._id || (offre.placesRestantes || 0) <= 0}
                       className="w-full rounded-lg bg-emerald-600 text-white py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      {joiningId === offre._id ? 'Preparation...' : 'Adherer et payer'}
+                      {joiningId === offre._id ? 'Enregistrement...' : 'Adhérer sans payer maintenant'}
                     </button>
                   </div>
                 )}

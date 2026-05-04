@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import TontineAdhesion from '@/models/TontineAdhesion';
+import TontineAdhesionEcheance from '@/models/TontineAdhesionEcheance';
 import { checkPaygateStatusByIdentifier, mapPaygateStatusToInternal } from '@/lib/paygate';
+import { applyPaygateStatusToEcheance } from '@/lib/tontine-schedule';
 
 function applyPaymentStatus(adhesion: any, internalStatus: string, statusPayload: any) {
   adhesion.paymentRawStatus = String(statusPayload?.status || '');
@@ -45,6 +47,16 @@ export async function POST(request: Request) {
     const identifier = String(body?.identifier || '').trim();
     if (!identifier) {
       return NextResponse.json({ success: false, error: 'Identifier manquant.' }, { status: 400 });
+    }
+
+    const echeance = await TontineAdhesionEcheance.findOne({ paymentIdentifier: identifier });
+    if (echeance) {
+      const statusPayload = await checkPaygateStatusByIdentifier(identifier);
+      const internalStatus = mapPaygateStatusToInternal(String(statusPayload?.status || ''));
+      applyPaygateStatusToEcheance(echeance, internalStatus, statusPayload);
+      await echeance.save();
+
+      return NextResponse.json({ success: true, data: { echeanceId: echeance._id, paymentStatus: echeance.paymentStatus } });
     }
 
     const adhesion = await TontineAdhesion.findOne({ paymentIdentifier: identifier });

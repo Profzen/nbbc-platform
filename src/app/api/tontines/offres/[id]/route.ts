@@ -4,7 +4,9 @@ import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/mongodb';
 import TontineOffre from '@/models/TontineOffre';
 import TontineAdhesion from '@/models/TontineAdhesion';
+import TontineAdhesionEcheance from '@/models/TontineAdhesionEcheance';
 import TontineTour from '@/models/TontineTour';
+import { getEffectiveEcheanceStatut } from '@/lib/tontine-schedule';
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -34,14 +36,50 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         : Promise.resolve(null),
     ]);
 
+    const adhesionIds = [
+      ...adhesions.map((item: any) => String(item._id)),
+      ...(monAdhesion ? [String((monAdhesion as any)._id)] : []),
+    ];
+
+    const echeancesRaw = adhesionIds.length > 0
+      ? await TontineAdhesionEcheance.find({ adhesionId: { $in: adhesionIds } })
+          .sort({ numeroEcheance: 1 })
+          .populate('validatedBy', 'name email role')
+          .lean()
+      : [];
+
+    const echeancesByAdhesion = new Map<string, any[]>();
+    for (const echeance of echeancesRaw) {
+      const key = String(echeance.adhesionId);
+      const next = {
+        ...echeance,
+        statut: getEffectiveEcheanceStatut(echeance),
+      };
+      const list = echeancesByAdhesion.get(key) || [];
+      list.push(next);
+      echeancesByAdhesion.set(key, list);
+    }
+
+    const adhesionsWithEcheances = adhesions.map((item: any) => ({
+      ...item,
+      echeances: echeancesByAdhesion.get(String(item._id)) || [],
+    }));
+
+    const monAdhesionWithEcheances = monAdhesion
+      ? {
+          ...monAdhesion,
+          echeances: echeancesByAdhesion.get(String((monAdhesion as any)._id)) || [],
+        }
+      : null;
+
     return NextResponse.json({
       success: true,
       data: {
         role,
         offre,
         tours,
-        adhesions,
-        monAdhesion,
+        adhesions: adhesionsWithEcheances,
+        monAdhesion: monAdhesionWithEcheances,
       },
     });
   } catch (error: any) {
@@ -83,6 +121,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     // Suppression en cascade
     await Promise.all([
       TontineAdhesion.deleteMany({ offreId: id }),
+      TontineAdhesionEcheance.deleteMany({ offreId: id }),
       TontineTour.deleteMany({ offreId: id }),
       TontineOffre.findByIdAndDelete(id),
     ]);
